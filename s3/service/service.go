@@ -19,7 +19,7 @@ func (s *Service) ListAllBuckets(ctx context.Context) ([]string, error) {
 	panic("implement me")
 }
 
-func (s *Service) GetBucketRegion(ctx context.Context) string {
+func (s *Service) GetBucketRegion(ctx context.Context, bucketName string) string {
 	panic("implement me")
 }
 
