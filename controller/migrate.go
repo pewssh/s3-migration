@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/0chain/s3migration/model"
+	"github.com/0chain/s3migration/s3"
+	s3svc "github.com/0chain/s3migration/s3/service"
 	"strings"
 	"sync"
 
@@ -42,7 +44,7 @@ type bucket struct {
 
 type Migration struct {
 	allocation *sdk.Allocation
-	s3Session  *session.Session
+	s3Service s3.S3
 
 	//Slice of map of bucket name and prefix. If prefix is empty string then every object will be uploaded.
 	buckets      []bucket //{"bucket1": "prefix1"}
@@ -57,8 +59,9 @@ type Migration struct {
 }
 
 func InitMigration(allocation *sdk.Allocation, sess *session.Session, appConfig *model.AppConfig) error {
+	s3Service := s3svc.NewService(sess)
+	migration.s3Service = s3Service
 	migration.allocation = allocation
-	migration.s3Session = sess
 	migration.resume = appConfig.Resume
 	migration.encrypt = appConfig.Encrypt
 	migration.skip = appConfig.Skip
@@ -83,7 +86,7 @@ func InitMigration(allocation *sdk.Allocation, sess *session.Session, appConfig 
 				prefix = res[1]
 			}
 
-			region := getBucketRegion(bucketName)
+			region := migration.s3Service.GetBucketRegion(context.Background(), bucketName)
 
 			migration.buckets = append(migration.buckets, bucket{
 				name:   bucketName,

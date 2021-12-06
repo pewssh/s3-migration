@@ -1,4 +1,4 @@
-package controller
+package dstorage
 
 //use rate limiter here.
 //All upload should go through this file so you can limit rate of upload request so you don't get blocked by blobber.
@@ -12,3 +12,6 @@ package controller
 
 //We also need to be careful about committing upload. There might be race between committing request resulting in commit failure.
 //So lets put commit request in a queue(use channel) and try three times. If it fails to commit then save state of all bucket and abort the program.
+
+type DStorage interface {
+}
