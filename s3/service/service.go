@@ -10,9 +10,9 @@ import (
 	"log"
 )
 
-var existingFiles []model.FileRef
+var existingFiles map[string]model.FileRef
 
-func SetExistingFileList(dStorageFiles []model.FileRef) {
+func SetExistingFileList(dStorageFiles map[string]model.FileRef) {
 	existingFiles = dStorageFiles
 }
 
@@ -54,10 +54,6 @@ func (s *Service) ListFilesInBucket(ctx context.Context, opts model.ListFileOpti
 			if aws.Int64Value(item.Size) == 0 {
 				continue
 			}
-			//count++
-			//log.Println(count,":", aws.StringValue(item.Key))
-			//remoteFilePath := fmt.Sprintf("/%s/%s", bucket, aws.StringValue(item.Key))
-			//bucketFiles[remoteFilePath] = aws.Int64Value(item.Size)
 
 			//todo: compare with existing files and manage conflicts (skip, replace, rename)
 
