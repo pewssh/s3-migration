@@ -70,7 +70,6 @@ func InitMigration(allocation *sdk.Allocation, sess *session.Session, appConfig 
 
 	if appConfig.Buckets == nil{
 		// list all buckets form s3 and append them to migration.buckets
-
 	} else {
 		for _, bkt := range appConfig.Buckets {
 			res := strings.Split(bkt, ":")
@@ -86,7 +85,7 @@ func InitMigration(allocation *sdk.Allocation, sess *session.Session, appConfig 
 				prefix = res[1]
 			}
 
-			region := migration.s3Service.GetBucketRegion(context.Background(), bucketName)
+			region, _ := migration.s3Service.GetBucketRegion(context.Background(), bucketName)
 
 			migration.buckets = append(migration.buckets, bucket{
 				name:   bucketName,

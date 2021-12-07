@@ -2,12 +2,15 @@ package service
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"github.com/0chain/s3migration/s3"
 	"github.com/0chain/s3migration/util"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	awsS3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	"golang.org/x/sync/errgroup"
+	"log"
 	"sync"
 )
 
@@ -93,21 +96,31 @@ func (s *Service) getBucketRegion(ctx context.Context, bucketName string, client
 	return string(locationInfo.LocationConstraint), nil
 }
 
-func (s *Service) GetBucketRegion(ctx context.Context, bucketList []string) ([]s3.Bucket, error) {
-	var client *awsS3.Client
-	for _, c := range s.clientMap {
-		if c != nil {
-			client = c
-			break
+func (s *Service) getClient(location string) *awsS3.Client {
+	if location == "" {
+		for _, c := range s.clientMap {
+			if c != nil {
+				return c
+			}
+		}
+	} else {
+		if c, ok := s.clientMap[location]; ok {
+			return c
 		}
 	}
 
-	if client == nil {
-		panic("client not initialized")
-	}
+	panic("client not initialized")
+}
+
+func (s *Service) GetBucketRegion(ctx context.Context, bucketList []string) ([]s3.Bucket, error) {
+	client := s.getClient("")
 
 	var bucketLocationData []s3.Bucket
 
+	var locErr []struct{
+		err error
+		bucketName string
+	}
 	g, groupCtx := errgroup.WithContext(ctx)
 	mutex := &sync.Mutex{}
 	for _, b := range bucketList {
@@ -115,7 +128,11 @@ func (s *Service) GetBucketRegion(ctx context.Context, bucketList []string) ([]s
 		g.Go(func() error {
 			locDetail, err := client.GetBucketLocation(groupCtx, &awsS3.GetBucketLocationInput{Bucket: &bucket})
 			if err != nil {
-				return err
+				locErr = append(locErr, struct {
+					err        error
+					bucketName string
+				}{err: err, bucketName: bucket})
+				return nil
 			}
 
 			location := string(locDetail.LocationConstraint)
@@ -137,5 +154,50 @@ func (s *Service) GetBucketRegion(ctx context.Context, bucketList []string) ([]s
 		return bucketLocationData, err
 	}
 
+	if len(locErr) > 0 {
+		for _, loc := range locErr {
+			log.Printf("errors fetching loc data bucketName: %s, err : %+v", loc.bucketName, loc.err)
+		}
+	}
+
+	if len(locErr) == len(bucketList) {
+		return bucketLocationData, errors.New("error fetching location Data")
+	}
+
 	return bucketLocationData, nil
+}
+
+func (s *Service) getObjects(ctx context.Context, bucketName, objectPrefix, location string, maxKeys int32) {
+	client := s.getClient(location)
+
+	params := &awsS3.ListObjectsV2Input{
+		Bucket: &bucketName,
+	}
+	if len(objectPrefix) != 0 {
+		params.Prefix = &objectPrefix
+	}
+	p := awsS3.NewListObjectsV2Paginator(client, params, func(o *awsS3.ListObjectsV2PaginatorOptions) {
+		if v := maxKeys; v != 0 {
+			o.Limit = v
+		}
+	})
+
+	var i int
+	log.Println("Objects:")
+
+	for p.HasMorePages() {
+		i++
+
+		// Next Page takes a new context for each page retrieval. This is where
+		// you could add timeouts or deadlines.
+		page, err := p.NextPage(ctx)
+		if err != nil {
+			log.Fatalf("failed to get page %v, %v", i, err)
+		}
+
+		// Log the objects found
+		for _, obj := range page.Contents {
+			fmt.Println("Object:", *obj.Key, *obj.LastModified, obj.Size)
+		}
+	}
 }
