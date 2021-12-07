@@ -7,6 +7,7 @@ import (
 	"github.com/0chain/s3migration/model"
 	"github.com/0chain/s3migration/s3"
 	s3svc "github.com/0chain/s3migration/s3/service"
+	"log"
 	"strings"
 	"sync"
 
@@ -44,7 +45,7 @@ type bucket struct {
 
 type Migration struct {
 	allocation *sdk.Allocation
-	s3Service s3.S3
+	s3Service  s3.S3
 
 	//Slice of map of bucket name and prefix. If prefix is empty string then every object will be uploaded.
 	buckets      []bucket //{"bucket1": "prefix1"}
@@ -67,10 +68,23 @@ func InitMigration(allocation *sdk.Allocation, sess *session.Session, appConfig 
 	migration.skip = appConfig.Skip
 	migration.concurrency = appConfig.Concurrency
 
-
-	if appConfig.Buckets == nil{
+	if len(appConfig.Buckets) == 0 {
+		log.Println("appConfig.Buckets == nil")
 		// list all buckets form s3 and append them to migration.buckets
+		buckets, err := migration.s3Service.ListAllBuckets(context.Background())
+		if err != nil {
+			log.Println("error at checkpoint 1")
+			log.Println(err)
+			return err
+		}
 
+		for _, bkt := range buckets {
+			migration.buckets = append(migration.buckets, bucket{
+				name:   bkt,
+				prefix: "/",
+				region: appConfig.Region,
+			})
+		}
 	} else {
 		for _, bkt := range appConfig.Buckets {
 			res := strings.Split(bkt, ":")
@@ -86,7 +100,7 @@ func InitMigration(allocation *sdk.Allocation, sess *session.Session, appConfig 
 				prefix = res[1]
 			}
 
-			region := migration.s3Service.GetBucketRegion(context.Background(), bucketName)
+			region := GetDefaultRegion(appConfig.Region)
 
 			migration.buckets = append(migration.buckets, bucket{
 				name:   bucketName,

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/0chain/s3migration/model"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/spf13/cobra"
 
@@ -21,9 +22,9 @@ var (
 	encrypt              bool
 	resume               bool
 	skip                 int // 0 --> Replace; 1 --> Skip; 2 --> Duplicate
-
-	allocationTextPath string
-	awsCredPath        string
+	region               string
+	allocationTextPath   string
+	awsCredPath          string
 )
 
 // migrateCmd is the migrateFromS3 sub command to migrate whole objects from some buckets.
@@ -35,6 +36,7 @@ func init() {
 	//flags related to s3
 	migrateCmd.PersistentFlags().StringVar(&accessKey, "access-key", "", "access-key of aws")
 	migrateCmd.PersistentFlags().StringVar(&secretKey, "secret-key", "", "secret-key of aws")
+	migrateCmd.PersistentFlags().StringVar(&region, "region", "", "region of s3 buckets")
 	migrateCmd.PersistentFlags().StringSliceVar(&buckets, "buckets", []string{}, "specific s3 buckets to use. Use bucketName:prefix format if prefix filter is required or only bucketName for migrating all objects")
 	migrateCmd.Flags().StringVar(&migrateToPath, "migrate-to", "/", "Remote path where buckets will be migrated to")
 
@@ -101,12 +103,13 @@ var migrateCmd = &cobra.Command{
 			return err
 		}
 
-		s3Session, err := session.NewSession()
+		s3Session, err := session.NewSession(&aws.Config{Region: aws.String(controller.GetDefaultRegion(region))})
 		if err != nil {
 			return err
 		}
 
 		appConfig := model.AppConfig{
+			Region:        region,
 			Skip:          skip,
 			Resume:        resume,
 			Concurrency:   concurrency,

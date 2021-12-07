@@ -5,6 +5,7 @@ type AppConfig struct {
 	Resume        bool
 	Concurrency   int
 	Buckets       []string
+	Region        string
 	MigrateToPath string
 	Encrypt       bool
 }
