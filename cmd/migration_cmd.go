@@ -118,10 +118,12 @@ var migrateCmd = &cobra.Command{
 			Encrypt:       encrypt,
 		}
 
-		if err := controller.InitMigration(allocation, s3Session, &appConfig); err != nil {
+		migration := controller.NewMigration()
+
+		if err := migration.InitMigration(allocation, s3Session, &appConfig); err != nil {
 			return err
 		}
 
-		return controller.Migrate()
+		return migration.Migrate()
 	},
 }

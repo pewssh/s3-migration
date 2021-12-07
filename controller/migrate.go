@@ -2,17 +2,16 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/0chain/s3migration/model"
 	"github.com/0chain/s3migration/s3"
 	s3svc "github.com/0chain/s3migration/s3/service"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"log"
 	"strings"
 	"sync"
-
-	"github.com/0chain/gosdk/zboxcore/sdk"
-	"github.com/aws/aws-sdk-go/aws/session"
+	"time"
 )
 
 const Batch = 10
@@ -22,7 +21,6 @@ const (
 	Duplicate        // Will add _copy prefix and uploads the file
 )
 
-var migration Migration = Migration{}
 var isMigrationInitialized bool
 
 //Use context for all requests.
@@ -59,29 +57,31 @@ type Migration struct {
 	encrypt     bool
 }
 
-func InitMigration(allocation *sdk.Allocation, sess *session.Session, appConfig *model.AppConfig) error {
+func NewMigration() *Migration {
+	return &Migration{}
+}
+
+func (m *Migration) InitMigration(allocation *sdk.Allocation, sess *session.Session, appConfig *model.AppConfig) error {
 	s3Service := s3svc.NewService(sess)
-	migration.s3Service = s3Service
-	migration.allocation = allocation
-	migration.resume = appConfig.Resume
-	migration.encrypt = appConfig.Encrypt
-	migration.skip = appConfig.Skip
-	migration.concurrency = appConfig.Concurrency
+	m.s3Service = s3Service
+	m.allocation = allocation
+	m.resume = appConfig.Resume
+	m.encrypt = appConfig.Encrypt
+	m.skip = appConfig.Skip
+	m.concurrency = appConfig.Concurrency
 
 	if len(appConfig.Buckets) == 0 {
-		log.Println("appConfig.Buckets == nil")
-		// list all buckets form s3 and append them to migration.buckets
-		buckets, err := migration.s3Service.ListAllBuckets(context.Background())
+		// list all buckets form s3 and append them to m.buckets
+		buckets, err := m.s3Service.ListAllBuckets(context.Background())
 		if err != nil {
-			log.Println("error at checkpoint 1")
-			log.Println(err)
 			return err
 		}
 
 		for _, bkt := range buckets {
-			migration.buckets = append(migration.buckets, bucket{
+			log.Println(bkt)
+			m.buckets = append(m.buckets, bucket{
 				name:   bkt,
-				prefix: "/",
+				prefix: "",
 				region: appConfig.Region,
 			})
 		}
@@ -102,7 +102,7 @@ func InitMigration(allocation *sdk.Allocation, sess *session.Session, appConfig 
 
 			region := GetDefaultRegion(appConfig.Region)
 
-			migration.buckets = append(migration.buckets, bucket{
+			m.buckets = append(m.buckets, bucket{
 				name:   bucketName,
 				prefix: prefix,
 				region: region,
@@ -114,6 +114,94 @@ func InitMigration(allocation *sdk.Allocation, sess *session.Session, appConfig 
 
 	isMigrationInitialized = true
 
+	return nil
+}
+
+// getExistingFileList list existing files (with size) from dStorage
+func setExistingFileList(allocationID string) error {
+	dStorageFileList := make([]model.FileRef, 0)
+	allocationObj, err := sdk.GetAllocation(allocationID)
+	if err != nil {
+		log.Println("Error fetching the allocation", err)
+		return err
+	}
+	// Create filter
+	filter := []string{".DS_Store", ".git"}
+	exclMap := make(map[string]int)
+	for idx, path := range filter {
+		exclMap[strings.TrimRight(path, "/")] = idx
+	}
+
+	remoteFiles, err := allocationObj.GetRemoteFileMap(exclMap)
+	if err != nil {
+		log.Println("Error getting remote files.", err)
+		return err
+	}
+
+	for remoteFileName, remoteFileValue := range remoteFiles {
+		if remoteFileValue.ActualSize > 0 {
+			dStorageFileList = append(dStorageFileList, model.FileRef{Name: remoteFileName, Size: remoteFileValue.ActualSize})
+		}
+	}
+
+	s3svc.SetExistingFileList(dStorageFileList)
+
+	return nil
+}
+
+func (m *Migration) Migrate() error {
+	defer rootContextCancel()
+
+	if !isMigrationInitialized {
+		return fmt.Errorf("migration is not initialized")
+	}
+
+	if err := setExistingFileList(m.allocation.ID); err != nil {
+		log.Println(err)
+		return err
+	}
+
+	migrationFileQueue := make(chan model.FileRef)
+
+	wg := sync.WaitGroup{}
+
+	count := 0
+	uploadInProgress := 0
+	go func() {
+		for {
+			if uploadInProgress >= m.concurrency {
+				continue
+			}
+			migrationFile := <-migrationFileQueue
+			count++
+			uploadInProgress++
+			go func() {
+				log.Println(migrationFile.Name, "will be uploaded from here")
+				//serial := count
+				//log.Println("migrate this file",serial, migrationFile.Name)
+				//time.Sleep(time.Second* time.Duration(serial*4))
+				//log.Println(serial, migrationFile.Name, "done")
+
+				uploadInProgress--
+
+				wg.Done()
+			}()
+
+			time.Sleep(time.Second)
+		}
+	}()
+
+	for _, bkt := range m.buckets {
+		if bkt.name == "iamrz1-migration" {
+			_, err := m.s3Service.ListFilesInBucket(context.Background(), model.ListFileOptions{Bucket: bkt.name, Prefix: bkt.prefix, FileQueue: migrationFileQueue, WaitGroup: &wg})
+			if err != nil {
+				log.Println(err)
+			}
+		}
+	}
+	fmt.Println("Waiting for all goroutine to complete")
+	wg.Wait()
+	fmt.Println("Waiting done", uploadInProgress)
 	return nil
 }
 
@@ -155,38 +243,4 @@ func (ms *MigrationState) cleanBatch() {
 func (ms *MigrationState) saveState() {
 	//Write its state to the file
 	//Check objectUploadStatus
-}
-
-func Migrate() error {
-	defer rootContextCancel()
-
-	if !isMigrationInitialized {
-		return errors.New("migration is not initialized")
-	}
-
-	limitCh := make(chan struct{}, migration.concurrency)
-	wg := sync.WaitGroup{}
-	//Now you have all you need; Start to migrate
-	for _, bkt := range migration.buckets {
-
-		limitCh <- struct{}{}
-
-		wg.Add(1)
-
-		go func(bkt bucket) {
-			defer func() {
-				<-limitCh
-				wg.Done()
-			}()
-
-			//Now here you can run migration in batch for each bucket. Limit this for loop by concurrency number. Make batch to some number, 10 may be good.
-			//
-
-		}(bkt)
-
-	}
-	fmt.Println("Waiting for all goroutine to complete")
-	wg.Wait()
-
-	return nil
 }
