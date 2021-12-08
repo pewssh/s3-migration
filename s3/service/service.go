@@ -118,8 +118,8 @@ func (s *Service) GetBucketRegion(ctx context.Context, bucketList []string) ([]s
 
 	var bucketLocationData []s3.Bucket
 
-	var locErr []struct{
-		err error
+	var locErr []struct {
+		err        error
 		bucketName string
 	}
 	g, groupCtx := errgroup.WithContext(ctx)
@@ -199,10 +199,10 @@ func (s *Service) ListFilesInBucket(ctx context.Context, opts model.ListFileOpti
 
 		for _, obj := range page.Contents {
 			opts.FileQueue <- model.FileRef{
-				Bucket: opts.Bucket,
-				Region: opts.Region,
-				Name:   aws.ToString(obj.Key),
-				Size: 	obj.Size,
+				Bucket:     opts.Bucket,
+				Region:     opts.Region,
+				Name:       aws.ToString(obj.Key),
+				Size:       obj.Size,
 				ModifiedAt: aws.ToTime(obj.LastModified),
 				UploadType: "later", //regular, replace, rename
 			}

@@ -60,7 +60,7 @@ func NewMigration() *Migration {
 	return &Migration{}
 }
 
-func (m *Migration) InitMigration(ctx context.Context,allocation *sdk.Allocation, s3Service s3.S3, appConfig *model.AppConfig) error {
+func (m *Migration) InitMigration(ctx context.Context, allocation *sdk.Allocation, s3Service s3.S3, appConfig *model.AppConfig) error {
 	m.s3Service = s3Service
 	m.allocation = allocation
 	m.resume = appConfig.Resume

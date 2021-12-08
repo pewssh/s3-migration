@@ -117,7 +117,7 @@ var migrateCmd = &cobra.Command{
 
 		migration := controller.NewMigration()
 
-		if err := migration.InitMigration(context.Background() ,allocation, s3Service, &appConfig); err != nil {
+		if err := migration.InitMigration(context.Background(), allocation, s3Service, &appConfig); err != nil {
 			return err
 		}
 
