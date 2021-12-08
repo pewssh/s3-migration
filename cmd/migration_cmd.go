@@ -1,11 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/0chain/s3migration/model"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
+	s3svc "github.com/0chain/s3migration/s3/service"
 	"github.com/spf13/cobra"
 
 	"github.com/0chain/gosdk/zboxcore/sdk"
@@ -103,10 +103,7 @@ var migrateCmd = &cobra.Command{
 			return err
 		}
 
-		s3Session, err := session.NewSession(&aws.Config{Region: aws.String(controller.GetDefaultRegion(region))})
-		if err != nil {
-			return err
-		}
+		s3Service := s3svc.NewService(region)
 
 		appConfig := model.AppConfig{
 			Region:        region,
@@ -120,7 +117,7 @@ var migrateCmd = &cobra.Command{
 
 		migration := controller.NewMigration()
 
-		if err := migration.InitMigration(allocation, s3Session, &appConfig); err != nil {
+		if err := migration.InitMigration(context.Background(), allocation, s3Service, &appConfig); err != nil {
 			return err
 		}
 

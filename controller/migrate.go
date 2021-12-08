@@ -7,7 +7,6 @@ import (
 	"github.com/0chain/s3migration/model"
 	"github.com/0chain/s3migration/s3"
 	s3svc "github.com/0chain/s3migration/s3/service"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"log"
 	"strings"
 	"sync"
@@ -61,8 +60,7 @@ func NewMigration() *Migration {
 	return &Migration{}
 }
 
-func (m *Migration) InitMigration(allocation *sdk.Allocation, sess *session.Session, appConfig *model.AppConfig) error {
-	s3Service := s3svc.NewService(sess)
+func (m *Migration) InitMigration(ctx context.Context, allocation *sdk.Allocation, s3Service s3.S3, appConfig *model.AppConfig) error {
 	m.s3Service = s3Service
 	m.allocation = allocation
 	m.resume = appConfig.Resume
@@ -72,19 +70,24 @@ func (m *Migration) InitMigration(allocation *sdk.Allocation, sess *session.Sess
 
 	if len(appConfig.Buckets) == 0 {
 		// list all buckets form s3 and append them to m.buckets
-		buckets, err := m.s3Service.ListAllBuckets(context.Background())
+		buckets, err := m.s3Service.ListAllBuckets(ctx)
 		if err != nil {
 			return err
 		}
 
-		for _, bkt := range buckets {
+		bucketWithLocation, err := m.s3Service.GetBucketRegion(ctx, buckets)
+		if err != nil {
+			return err
+		}
+
+		for _, bkt := range bucketWithLocation {
 			log.Println(bkt)
 			// todo: get region for each bucket
 
 			m.buckets = append(m.buckets, bucket{
-				name:   bkt,
+				name:   bkt.Name,
 				prefix: "",
-				region: appConfig.Region,
+				region: bkt.Location,
 			})
 		}
 	} else {
@@ -102,17 +105,19 @@ func (m *Migration) InitMigration(allocation *sdk.Allocation, sess *session.Sess
 				prefix = res[1]
 			}
 
-			region := GetDefaultRegion(appConfig.Region)
-
+			bucketWithRegion, _ := m.s3Service.GetBucketRegion(ctx, []string{bucketName})
+			if len(bucketWithRegion) == 0 {
+				continue
+			}
 			m.buckets = append(m.buckets, bucket{
 				name:   bucketName,
 				prefix: prefix,
-				region: region,
+				region: bucketWithRegion[0].Location,
 			})
 		}
 	}
 
-	rootContext, rootContextCancel = context.WithCancel(context.Background())
+	rootContext, rootContextCancel = context.WithCancel(ctx)
 
 	isMigrationInitialized = true
 
@@ -195,7 +200,7 @@ func (m *Migration) Migrate() error {
 	}()
 
 	for _, bkt := range m.buckets {
-		_, err := m.s3Service.ListFilesInBucket(context.Background(), model.ListFileOptions{Bucket: bkt.name, Prefix: bkt.prefix, FileQueue: migrationFileQueue, WaitGroup: &wg})
+		_, err := m.s3Service.ListFilesInBucket(context.Background(), model.ListFileOptions{Bucket: bkt.name, Prefix: bkt.prefix, Region: bkt.region, FileQueue: migrationFileQueue, WaitGroup: &wg})
 		if err != nil {
 			log.Println(err)
 		}
