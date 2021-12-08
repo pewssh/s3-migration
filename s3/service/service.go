@@ -14,9 +14,9 @@ import (
 	"github.com/0chain/s3migration/model"
 )
 
-var existingFiles []model.FileRef
+var existingFiles map[string]model.FileRef
 
-func SetExistingFileList(dStorageFiles []model.FileRef) {
+func SetExistingFileList(dStorageFiles map[string]model.FileRef) {
 	existingFiles = dStorageFiles
 }
 
@@ -203,7 +203,7 @@ func (s *Service) ListFilesInBucket(ctx context.Context, opts model.ListFileOpti
 				Region: opts.Region,
 				Name:   aws.ToString(obj.Key),
 				Size: 	obj.Size,
-				ModifiedTime: aws.ToTime(obj.LastModified).Unix(),
+				ModifiedAt: aws.ToTime(obj.LastModified),
 				UploadType: "later", //regular, replace, rename
 			}
 		}

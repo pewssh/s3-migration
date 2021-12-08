@@ -1,6 +1,9 @@
 package model
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 type AppConfig struct {
 	Skip          int
@@ -18,7 +21,7 @@ type FileRef struct {
 	UploadType string
 	Bucket  string
 	Region string
-	ModifiedTime int64
+	ModifiedAt time.Time
 }
 
 type ListFileOptions struct {

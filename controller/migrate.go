@@ -82,6 +82,8 @@ func (m *Migration) InitMigration(ctx context.Context,allocation *sdk.Allocation
 
 		for _, bkt := range bucketWithLocation {
 			log.Println(bkt)
+			// todo: get region for each bucket
+
 			m.buckets = append(m.buckets, bucket{
 				name:   bkt.Name,
 				prefix: "",
@@ -124,7 +126,7 @@ func (m *Migration) InitMigration(ctx context.Context,allocation *sdk.Allocation
 
 // getExistingFileList list existing files (with size) from dStorage
 func setExistingFileList(allocationID string) error {
-	dStorageFileList := make([]model.FileRef, 0)
+	dStorageFileList := make(map[string]model.FileRef, 0)
 	allocationObj, err := sdk.GetAllocation(allocationID)
 	if err != nil {
 		log.Println("Error fetching the allocation", err)
@@ -143,9 +145,12 @@ func setExistingFileList(allocationID string) error {
 		return err
 	}
 
+	// todo: add updated_by field in GetRemoteFileMap method of go-sdk
+
 	for remoteFileName, remoteFileValue := range remoteFiles {
 		if remoteFileValue.ActualSize > 0 {
-			dStorageFileList = append(dStorageFileList, model.FileRef{Name: remoteFileName, Size: remoteFileValue.ActualSize})
+			dStorageFileList[remoteFileName] = model.FileRef{Name: remoteFileName, Size: remoteFileValue.ActualSize}
+			//dStorageFileList[remoteFileName] = model.FileRef{Name: remoteFileName, Size: remoteFileValue.ActualSize, ModifiedAt: remoteFileValue.UpdatedAt}
 		}
 	}
 
@@ -182,10 +187,8 @@ func (m *Migration) Migrate() error {
 			uploadInProgress++
 			go func() {
 				log.Println(migrationFile.Name, "will be uploaded from here")
-				//serial := count
-				//log.Println("migrate this file",serial, migrationFile.Name)
-				//time.Sleep(time.Second* time.Duration(serial*4))
-				//log.Println(serial, migrationFile.Name, "done")
+
+				// todo:
 
 				uploadInProgress--
 
@@ -197,12 +200,11 @@ func (m *Migration) Migrate() error {
 	}()
 
 	for _, bkt := range m.buckets {
-		if bkt.name == "iamrz1-migration" {
-			_, err := m.s3Service.ListFilesInBucket(context.Background(), model.ListFileOptions{Bucket: bkt.name, Prefix: bkt.prefix, FileQueue: migrationFileQueue, WaitGroup: &wg})
-			if err != nil {
-				log.Println(err)
-			}
+		_, err := m.s3Service.ListFilesInBucket(context.Background(), model.ListFileOptions{Bucket: bkt.name, Prefix: bkt.prefix, FileQueue: migrationFileQueue, WaitGroup: &wg})
+		if err != nil {
+			log.Println(err)
 		}
+
 	}
 	fmt.Println("Waiting for all goroutine to complete")
 	wg.Wait()
