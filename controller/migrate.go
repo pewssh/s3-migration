@@ -200,7 +200,7 @@ func (m *Migration) Migrate() error {
 	}()
 
 	for _, bkt := range m.buckets {
-		_, err := m.s3Service.ListFilesInBucket(context.Background(), model.ListFileOptions{Bucket: bkt.name, Prefix: bkt.prefix, FileQueue: migrationFileQueue, WaitGroup: &wg})
+		_, err := m.s3Service.ListFilesInBucket(context.Background(), model.ListFileOptions{Bucket: bkt.name, Prefix: bkt.prefix, Region: bkt.region, FileQueue: migrationFileQueue, WaitGroup: &wg})
 		if err != nil {
 			log.Println(err)
 		}
