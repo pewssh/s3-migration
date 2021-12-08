@@ -3,41 +3,42 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/0chain/s3migration/s3"
-	"github.com/0chain/s3migration/util"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	awsS3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	"golang.org/x/sync/errgroup"
 	"log"
 	"sync"
+
+	"github.com/0chain/s3migration/model"
 )
+
+var existingFiles []model.FileRef
+
+func SetExistingFileList(dStorageFiles []model.FileRef) {
+	existingFiles = dStorageFiles
+}
 
 type Service struct {
 	clientMap map[string]*awsS3.Client
 }
 
-func NewService(awsAccessKey, awsSecretKey string, regions ...string) *Service {
-	err := util.SetAwsEnvCredentials(awsAccessKey, awsSecretKey)
-	if err != nil {
-		panic("setting aws cred, " + err.Error())
+func NewService(region string) *Service {
+	clientMap := make(map[string]*awsS3.Client)
+	if len(region) == 0 {
+		region = "us-east-1"
 	}
 
-	clientMap := make(map[string]*awsS3.Client)
-	if len(regions) == 0 {
-		regions = []string{"us-east-1"}
+	var cfg aws.Config
+	cfg, err := awsConfig.LoadDefaultConfig(context.Background())
+	if err != nil {
+		panic("configuration error " + err.Error() + "region: " + region)
 	}
-	for _, region := range regions {
-		var cfg aws.Config
-		cfg, err = awsConfig.LoadDefaultConfig(context.TODO())
-		if err != nil {
-			panic("configuration error " + err.Error() + "region: " + region)
-		}
-		cfg.Region = region
-		client := awsS3.NewFromConfig(cfg)
-		clientMap[region] = client
-	}
+
+	cfg.Region = region
+	client := awsS3.NewFromConfig(cfg)
+	clientMap[region] = client
 
 	return &Service{
 		clientMap: clientMap,
@@ -45,7 +46,7 @@ func NewService(awsAccessKey, awsSecretKey string, regions ...string) *Service {
 }
 
 func (s *Service) InitClientWithRegion(region string) {
-	cfg, err := awsConfig.LoadDefaultConfig(context.TODO())
+	cfg, err := awsConfig.LoadDefaultConfig(context.Background())
 	if err != nil {
 		panic("configuration error " + err.Error() + "region: " + region)
 	}
@@ -167,37 +168,47 @@ func (s *Service) GetBucketRegion(ctx context.Context, bucketList []string) ([]s
 	return bucketLocationData, nil
 }
 
-func (s *Service) getObjects(ctx context.Context, bucketName, objectPrefix, location string, maxKeys int32) {
-	client := s.getClient(location)
+func (s *Service) ListFilesInBucket(ctx context.Context, opts model.ListFileOptions) (map[string]int64, error) {
+	client := s.getClient(opts.Region)
+	bucketFiles := map[string]int64{}
 
-	params := &awsS3.ListObjectsV2Input{
-		Bucket: &bucketName,
+	log.Println("contents of bucket : ", opts.Bucket)
+
+	listObjectsInput := &awsS3.ListObjectsV2Input{
+		Bucket: &opts.Bucket,
 	}
-	if len(objectPrefix) != 0 {
-		params.Prefix = &objectPrefix
+	if len(opts.Prefix) != 0 {
+		listObjectsInput.Prefix = &opts.Prefix
 	}
-	p := awsS3.NewListObjectsV2Paginator(client, params, func(o *awsS3.ListObjectsV2PaginatorOptions) {
+
+	maxKeys := int32(1000)
+	pageNumber := 0
+
+	listObjectsPaginator := awsS3.NewListObjectsV2Paginator(client, listObjectsInput, func(o *awsS3.ListObjectsV2PaginatorOptions) {
 		if v := maxKeys; v != 0 {
 			o.Limit = v
 		}
 	})
 
-	var i int
-	log.Println("Objects:")
-
-	for p.HasMorePages() {
-		i++
-
-		// Next Page takes a new context for each page retrieval. This is where
-		// you could add timeouts or deadlines.
-		page, err := p.NextPage(ctx)
+	for listObjectsPaginator.HasMorePages() {
+		pageNumber++
+		page, err := listObjectsPaginator.NextPage(ctx)
 		if err != nil {
-			log.Fatalf("failed to get page %v, %v", i, err)
+			log.Fatalf("failed to get page %v, %v", pageNumber, err)
 		}
 
-		// Log the objects found
 		for _, obj := range page.Contents {
-			fmt.Println("Object:", *obj.Key, *obj.LastModified, obj.Size)
+			opts.FileQueue <- model.FileRef{
+				Bucket: opts.Bucket,
+				Region: opts.Region,
+				Name:   aws.ToString(obj.Key),
+				Size: 	obj.Size,
+				ModifiedTime: aws.ToTime(obj.LastModified).Unix(),
+				UploadType: "later", //regular, replace, rename
+			}
 		}
+
 	}
+
+	return bucketFiles, nil
 }

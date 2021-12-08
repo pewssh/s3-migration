@@ -1,10 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/0chain/s3migration/model"
-	"github.com/aws/aws-sdk-go/aws/session"
+	s3svc "github.com/0chain/s3migration/s3/service"
 	"github.com/spf13/cobra"
 
 	"github.com/0chain/gosdk/zboxcore/sdk"
@@ -21,9 +22,9 @@ var (
 	encrypt              bool
 	resume               bool
 	skip                 int // 0 --> Replace; 1 --> Skip; 2 --> Duplicate
-
-	allocationTextPath string
-	awsCredPath        string
+	region               string
+	allocationTextPath   string
+	awsCredPath          string
 )
 
 // migrateCmd is the migrateFromS3 sub command to migrate whole objects from some buckets.
@@ -35,6 +36,7 @@ func init() {
 	//flags related to s3
 	migrateCmd.PersistentFlags().StringVar(&accessKey, "access-key", "", "access-key of aws")
 	migrateCmd.PersistentFlags().StringVar(&secretKey, "secret-key", "", "secret-key of aws")
+	migrateCmd.PersistentFlags().StringVar(&region, "region", "", "region of s3 buckets")
 	migrateCmd.PersistentFlags().StringSliceVar(&buckets, "buckets", []string{}, "specific s3 buckets to use. Use bucketName:prefix format if prefix filter is required or only bucketName for migrating all objects")
 	migrateCmd.Flags().StringVar(&migrateToPath, "migrate-to", "/", "Remote path where buckets will be migrated to")
 
@@ -101,12 +103,10 @@ var migrateCmd = &cobra.Command{
 			return err
 		}
 
-		s3Session, err := session.NewSession()
-		if err != nil {
-			return err
-		}
+		s3Service := s3svc.NewService(region)
 
 		appConfig := model.AppConfig{
+			Region:        region,
 			Skip:          skip,
 			Resume:        resume,
 			Concurrency:   concurrency,
@@ -115,10 +115,12 @@ var migrateCmd = &cobra.Command{
 			Encrypt:       encrypt,
 		}
 
-		if err := controller.InitMigration(allocation, s3Session, &appConfig); err != nil {
+		migration := controller.NewMigration()
+
+		if err := migration.InitMigration(context.Background() ,allocation, s3Service, &appConfig); err != nil {
 			return err
 		}
 
-		return controller.Migrate()
+		return migration.Migrate()
 	},
 }

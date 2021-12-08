@@ -4,7 +4,6 @@ go 1.16
 
 require (
 	github.com/0chain/gosdk v1.3.4
-	github.com/aws/aws-sdk-go v1.27.0
 	github.com/aws/aws-sdk-go-v2 v1.11.2
 	github.com/aws/aws-sdk-go-v2/config v1.1.1
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.3.2 // indirect
