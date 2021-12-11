@@ -175,66 +175,50 @@ func (m *Migration) Migrate() error {
 		return err
 	}
 
+	attemptCount := 3
+	sleepDuration := 100 * time.Millisecond
+
+	var attrs fileref.Attributes
+	if m.whoPays != "" {
+		var wp common.WhoPays
+		if err := wp.Parse(m.whoPays); err != nil {
+			fmt.Printf("error parssing who-pays value. %s", err.Error())
+		} else {
+			attrs.WhoPaysForReads = wp
+		}
+	}
+
 	migrationFileQueue := make(chan model.FileRef)
 
 	wg := sync.WaitGroup{}
 
 	count := 0
 	uploadInProgress := 0
+	uploadMutex := &sync.RWMutex{}
 	go func() {
 		for {
+			uploadMutex.RLock()
 			if uploadInProgress >= m.concurrency {
 				continue
 			}
+			uploadMutex.RUnlock()
 			migrationFile := <-migrationFileQueue
 			count++
+			uploadMutex.Lock()
 			uploadInProgress++
+			uploadMutex.Unlock()
 			go func() {
 				defer func() {
+					uploadMutex.Lock()
 					uploadInProgress--
+					uploadMutex.Unlock()
 					wg.Done()
 				}()
-
-				src, err := m.s3Service.GetFile(context.Background(), model.GetFileOptions{
-					Bucket: migrationFile.Bucket,
-					Region: migrationFile.Region,
-					Key:    migrationFile.Key,
-				})
-				if err != nil {
-					log.Println(err)
-					return
-				}
-
-				log.Println(src.FilePath, src.FileSize)
-
-				uwg := &sync.WaitGroup{}
-				statusBar := &service.StatusBar{Wg: uwg}
-				uwg.Add(1)
-
-				var attrs fileref.Attributes
-
-				if m.whoPays != "" {
-					var wp common.WhoPays
-					if err = wp.Parse(m.whoPays); err != nil {
-						fmt.Printf("error parssing who-pays value. %s", err.Error())
-					} else {
-						attrs.WhoPaysForReads = wp
-					}
-				}
-
-				err = startChunkedUpload(m.allocation, src.SourceFile, src.FilePath, src.FileType, src.FileSize, m.encrypt, attrs, statusBar, migrationFile.IsUpdate)
-				if err != nil {
-					log.Println(err)
-					//todo: keep an array of failed uploads
-				}
-
-				uwg.Wait()
-				if !statusBar.Success {
-					fmt.Printf("upload failed. statusbar. success : %v \n", statusBar.Success)
-					//todo: keep an array of failed uploads
-				}
 			}()
 
+			util.Retry(attemptCount, sleepDuration, func() error {
+				return m.UploadFunc(migrationFile, attrs)
+			})
 			time.Sleep(time.Second)
 		}
 	}()
@@ -248,6 +232,33 @@ func (m *Migration) Migrate() error {
 	}
 
 	wg.Wait()
+	return nil
+}
+
+func (m *Migration) UploadFunc(migrationFile model.FileRef, attrs fileref.Attributes) error {
+	src, err := m.s3Service.GetFile(context.Background(), model.GetFileOptions{
+		Bucket: migrationFile.Bucket,
+		Region: migrationFile.Region,
+		Key:    migrationFile.Key,
+	})
+	if err != nil {
+		return err
+	}
+	log.Println(src.FilePath, src.FileSize)
+
+	uwg := &sync.WaitGroup{}
+	statusBar := &service.StatusBar{Wg: uwg}
+	uwg.Add(1)
+
+	err = startChunkedUpload(m.allocation, src.SourceFile, src.FilePath, src.FileType, src.FileSize, m.encrypt, attrs, statusBar, migrationFile.IsUpdate)
+	if err != nil {
+		return err
+	}
+
+	uwg.Wait()
+	if !statusBar.Success {
+		return fmt.Errorf("chunk upload failed")
+	}
 	return nil
 }
 
