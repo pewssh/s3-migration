@@ -188,7 +188,7 @@ func (m *Migration) Migrate() error {
 		}
 	}
 
-	migrationFileQueue := make(chan model.FileRef)
+	migrationFileQueue := make(chan model.FileRef, 10000)
 
 	wg := sync.WaitGroup{}
 
@@ -214,11 +214,11 @@ func (m *Migration) Migrate() error {
 					uploadMutex.Unlock()
 					wg.Done()
 				}()
-			}()
 
-			util.Retry(attemptCount, sleepDuration, func() error {
-				return m.UploadFunc(migrationFile, attrs)
-			})
+				util.Retry(attemptCount, sleepDuration, func() error {
+					return m.UploadFunc(migrationFile, attrs)
+				})
+			}()
 			time.Sleep(time.Second)
 		}
 	}()
@@ -249,6 +249,8 @@ func (m *Migration) UploadFunc(migrationFile model.FileRef, attrs fileref.Attrib
 	uwg := &sync.WaitGroup{}
 	statusBar := &service.StatusBar{Wg: uwg}
 	uwg.Add(1)
+
+	// TODO: Handle for error =  Upload failed as there was no commit consensus
 
 	err = startChunkedUpload(m.allocation, src.SourceFile, src.FilePath, src.FileType, src.FileSize, m.encrypt, attrs, statusBar, migrationFile.IsUpdate)
 	if err != nil {
