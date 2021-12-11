@@ -154,8 +154,7 @@ func setExistingFileList(allocationID string) error {
 
 	for remoteFileName, remoteFileValue := range remoteFiles {
 		if remoteFileValue.ActualSize > 0 {
-			dStorageFileList[remoteFileName] = &model.FileRef{Path: remoteFileName, Size: remoteFileValue.ActualSize, ModifiedAt: time.Now().UTC()}
-			// todo: add updated_by field in GetRemoteFileMap method of go-sdk
+			dStorageFileList[remoteFileName] = &model.FileRef{Path: remoteFileName, Size: remoteFileValue.ActualSize, UpdatedAt: util.ConvertGoSDKTimeToTime(remoteFileValue.UpdatedAt)}
 		}
 	}
 
@@ -222,11 +221,11 @@ func (m *Migration) Migrate() error {
 						attrs.WhoPaysForReads = wp
 					}
 				}
-				//todo: implement encrypt and who-pays by putting user input in Migration config
 
 				err = startChunkedUpload(m.allocation, src.SourceFile, src.FilePath, src.FileType, src.FileSize, m.encrypt, attrs, statusBar, migrationFile.IsUpdate)
 				if err != nil {
 					log.Println(err)
+					//todo: keep an array of failed uploads
 				}
 
 				uwg.Wait()
@@ -272,7 +271,7 @@ func startChunkedUpload(allocationObj *sdk.Allocation, fileReader io.Reader, rem
 		Attributes: attrs,
 	}
 
-	ChunkedUpload, err := sdk.CreateChunkedUpload(util.GetHomeDir(), allocationObj, fileMeta, newS3Reader(fileReader), isUpdate,
+	ChunkedUpload, err := sdk.CreateChunkedUpload(util.GetHomeDir(), allocationObj, fileMeta, newS3Reader(fileReader), isUpdate, false,
 		sdk.WithChunkSize(sdk.DefaultChunkSize),
 		sdk.WithEncrypt(encrypt),
 		sdk.WithStatusCallback(statusBar))

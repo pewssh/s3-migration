@@ -4,11 +4,17 @@ import (
 	"bufio"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/viper"
+)
+
+const (
+	ZGoSDKTimeFormat = "2006-01-02T15:04:05.999999Z"
 )
 
 // GetConfigDir get config directory , default is ~/.zcn/
@@ -128,4 +134,14 @@ func TrimSuffixPrefix(in, sp string) string {
 	}
 
 	return in
+}
+
+func ConvertGoSDKTimeToTime(in string) time.Time {
+	t, err := time.Parse(ZGoSDKTimeFormat, in)
+	if err != nil {
+		log.Println("failed to parse time string from gosdk")
+		return time.Now().UTC()
+	}
+
+	return t
 }

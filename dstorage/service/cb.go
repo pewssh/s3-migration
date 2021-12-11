@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"github.com/0chain/gosdk/core/transaction"
 	"os"
 	"sync"
 
@@ -39,7 +40,7 @@ func (s *StatusBar) Error(allocationID string, filePath string, op int, err erro
 	PrintError("Error in file operation:", errDetail)
 }
 
-func (s *StatusBar) CommitMetaCompleted(request, response string, err error) {
+func (s *StatusBar) CommitMetaCompleted(request, response string, txn *transaction.Transaction, err error) {
 	defer s.Wg.Done()
 	if err != nil {
 		s.Success = false

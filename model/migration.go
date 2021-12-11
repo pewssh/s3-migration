@@ -18,13 +18,13 @@ type AppConfig struct {
 }
 
 type FileRef struct {
-	Path       string
-	Bucket     string
-	Region     string
-	Key        string
-	Size       int64
-	IsUpdate   bool
-	ModifiedAt time.Time
+	Path      string
+	Bucket    string
+	Region    string
+	Key       string
+	Size      int64
+	IsUpdate  bool
+	UpdatedAt time.Time
 }
 
 type ListFileOptions struct {

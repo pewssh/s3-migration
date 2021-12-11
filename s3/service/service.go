@@ -214,7 +214,7 @@ func (s *Service) ListFilesInBucket(ctx context.Context, opts model.ListFileOpti
 			filePath := fmt.Sprintf("/%s", path.Join(opts.Bucket, aws.ToString(obj.Key)))
 			if existingFiles[filePath] != nil {
 				log.Println("duplicate file found with full path: ", filePath)
-				if existingFiles[filePath].Size == obj.Size && existingFiles[filePath].ModifiedAt.Unix() > aws.ToTime(obj.LastModified).Unix() {
+				if existingFiles[filePath].Size == obj.Size && existingFiles[filePath].UpdatedAt.Unix() > aws.ToTime(obj.LastModified).Unix() {
 					continue
 				}
 				isUpdate = true
@@ -223,13 +223,13 @@ func (s *Service) ListFilesInBucket(ctx context.Context, opts model.ListFileOpti
 			log.Println("Enqueuing this file to be uploaded:", aws.ToString(obj.Key), "isUpdate:", isUpdate)
 			opts.WaitGroup.Add(1)
 			opts.FileQueue <- model.FileRef{
-				Path:       filePath,
-				Bucket:     opts.Bucket,
-				Region:     opts.Region,
-				Key:        aws.ToString(obj.Key),
-				Size:       obj.Size,
-				ModifiedAt: aws.ToTime(obj.LastModified),
-				IsUpdate:   isUpdate,
+				Path:      filePath,
+				Bucket:    opts.Bucket,
+				Region:    opts.Region,
+				Key:       aws.ToString(obj.Key),
+				Size:      obj.Size,
+				UpdatedAt: aws.ToTime(obj.LastModified),
+				IsUpdate:  isUpdate,
 			}
 		}
 
