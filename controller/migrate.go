@@ -2,14 +2,13 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	thrown "github.com/0chain/errors"
 	"github.com/0chain/gosdk/core/common"
 	"github.com/0chain/gosdk/zboxcore/fileref"
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/0chain/gosdk/zboxcore/zboxutil"
-	"github.com/0chain/s3migration/dstorage/service"
+	dStorageUtil "github.com/0chain/s3migration/dstorage/util"
 	"github.com/0chain/s3migration/model"
 	"github.com/0chain/s3migration/s3"
 	s3svc "github.com/0chain/s3migration/s3/service"
@@ -247,7 +246,7 @@ func (m *Migration) UploadFunc(migrationFile model.FileRef, attrs fileref.Attrib
 	log.Println(src.FilePath, src.FileSize)
 
 	uwg := &sync.WaitGroup{}
-	statusBar := &service.StatusBar{Wg: uwg}
+	statusBar := &dStorageUtil.StatusBar{Wg: uwg}
 	uwg.Add(1)
 
 	// TODO: Handle for error =  Upload failed as there was no commit consensus
@@ -284,7 +283,7 @@ func startChunkedUpload(allocationObj *sdk.Allocation, fileReader io.Reader, rem
 		Attributes: attrs,
 	}
 
-	ChunkedUpload, err := sdk.CreateChunkedUpload(util.GetHomeDir(), allocationObj, fileMeta, newS3Reader(fileReader), isUpdate, false,
+	ChunkedUpload, err := sdk.CreateChunkedUpload(util.GetHomeDir(), allocationObj, fileMeta, util.NewStreamReader(fileReader), isUpdate, false,
 		sdk.WithChunkSize(sdk.DefaultChunkSize),
 		sdk.WithEncrypt(encrypt),
 		sdk.WithStatusCallback(statusBar))
@@ -293,25 +292,6 @@ func startChunkedUpload(allocationObj *sdk.Allocation, fileReader io.Reader, rem
 	}
 
 	return ChunkedUpload.Start()
-}
-
-func newS3Reader(source io.Reader) *S3StreamReader {
-	return &S3StreamReader{source}
-}
-
-type S3StreamReader struct {
-	io.Reader
-}
-
-func (r *S3StreamReader) Read(p []byte) (int, error) {
-	bLen, err := io.ReadAtLeast(r.Reader, p, len(p))
-	if err != nil {
-		if errors.Is(err, io.ErrUnexpectedEOF) {
-			return bLen, io.EOF
-		}
-		return bLen, err
-	}
-	return bLen, nil
 }
 
 type objectUploadStatus struct {

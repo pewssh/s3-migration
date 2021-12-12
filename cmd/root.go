@@ -3,7 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/0chain/s3migration/dstorage/service"
+	dStorageUtil "github.com/0chain/s3migration/dstorage/util"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -142,7 +142,7 @@ func initConfig() {
 
 		if _, err = os.Stat(walletFilePath); os.IsNotExist(err) {
 			wg := &sync.WaitGroup{}
-			statusBar := &service.ZCNStatus{Wg: wg}
+			statusBar := &dStorageUtil.ZCNStatus{Wg: wg}
 			wg.Add(1)
 			err = zcncore.CreateWallet(statusBar)
 			if err == nil {
