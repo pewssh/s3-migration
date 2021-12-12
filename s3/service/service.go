@@ -189,6 +189,10 @@ func (s *Service) ListFilesInBucket(ctx context.Context, opts model.ListFileOpti
 		listObjectsInput.Prefix = &opts.Prefix
 	}
 
+	if len(opts.StartAfter) != 0 {
+		listObjectsInput.StartAfter = &opts.StartAfter
+	}
+
 	maxKeys := int32(1000)
 	pageNumber := 0
 

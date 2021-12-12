@@ -31,11 +31,12 @@ type FileRef struct {
 }
 
 type ListFileOptions struct {
-	Bucket    string
-	Prefix    string
-	Region    string
-	FileQueue chan FileRef
-	WaitGroup *sync.WaitGroup
+	Bucket     string
+	Prefix     string
+	Region     string
+	StartAfter string
+	FileQueue  chan FileRef
+	WaitGroup  *sync.WaitGroup
 }
 type GetFileOptions struct {
 	Bucket string

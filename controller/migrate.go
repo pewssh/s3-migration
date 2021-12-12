@@ -223,6 +223,8 @@ func (m *Migration) Migrate() error {
 		}
 	}()
 
+	// TODO: Add starts with in List Files in Bucket Options
+
 	for _, bkt := range m.buckets {
 		_, err := m.s3Service.ListFilesInBucket(context.Background(), model.ListFileOptions{Bucket: bkt.name, Prefix: bkt.prefix, Region: bkt.region, FileQueue: migrationFileQueue, WaitGroup: &wg})
 		if err != nil {
