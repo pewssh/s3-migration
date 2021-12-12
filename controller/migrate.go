@@ -54,8 +54,9 @@ type Migration struct {
 	buckets      []bucket //{"bucket1": "prefix1"}
 	bucketStates []map[string]*MigrationState
 
-	resume bool
-	skip   int
+	resume     bool
+	skip       int
+	retryCount int
 
 	//Number of goroutines to run. So at most concurrency * Batch goroutines will run. i.e. for bucket level and object level
 	concurrency int
@@ -76,6 +77,7 @@ func (m *Migration) InitMigration(ctx context.Context, allocation *sdk.Allocatio
 	m.skip = appConfig.Skip
 	m.concurrency = appConfig.Concurrency
 	m.dStorageService = dSService
+	m.retryCount = appConfig.RetryCount
 
 	if len(appConfig.Buckets) == 0 {
 		// list all buckets form s3 and append them to m.buckets
@@ -173,7 +175,6 @@ func (m *Migration) Migrate() error {
 		return err
 	}
 
-	attemptCount := 3
 	sleepDuration := 100 * time.Millisecond
 
 	var attrs fileref.Attributes
@@ -214,7 +215,7 @@ func (m *Migration) Migrate() error {
 				}()
 
 				// TODO: compile list of errors for which we do not want to retry.
-				util.Retry(attemptCount, sleepDuration, func() error {
+				util.Retry(m.retryCount, sleepDuration, func() error {
 					return m.UploadFunc(migrationFile, attrs)
 				})
 			}()

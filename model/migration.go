@@ -17,6 +17,7 @@ type AppConfig struct {
 	MigrateToPath string
 	WhoPays       string
 	Encrypt       bool
+	RetryCount    int
 }
 
 type FileRef struct {

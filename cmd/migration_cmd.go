@@ -27,6 +27,7 @@ var (
 	allocationTextPath   string
 	whoPays              string
 	awsCredPath          string
+	retryCount           int
 )
 
 // migrateCmd is the migrateFromS3 sub command to migrate whole objects from some buckets.
@@ -49,6 +50,7 @@ func init() {
 	migrateCmd.Flags().IntVar(&concurrency, "concurrency", 10, "number of concurrent files to process concurrently during migration")
 	migrateCmd.Flags().BoolVar(&resume, "resume", false, "pass this option to resume migration from previous state")
 	migrateCmd.Flags().IntVar(&skip, "skip", 1, "0 --> Replace existing files; 1 --> Skip migration; 2 --> Duplicate")
+	migrateCmd.Flags().IntVar(&retryCount, "retry", 3, "retry count for upload to dstorage")
 }
 
 var migrateCmd = &cobra.Command{
@@ -121,6 +123,7 @@ var migrateCmd = &cobra.Command{
 			MigrateToPath: migrateToPath,
 			WhoPays:       whoPays,
 			Encrypt:       encrypt,
+			RetryCount:    retryCount,
 		}
 
 		migration := controller.NewMigration()
