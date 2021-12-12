@@ -3,20 +3,16 @@ package controller
 import (
 	"context"
 	"fmt"
-	thrown "github.com/0chain/errors"
 	"github.com/0chain/gosdk/core/common"
 	"github.com/0chain/gosdk/zboxcore/fileref"
 	"github.com/0chain/gosdk/zboxcore/sdk"
-	"github.com/0chain/gosdk/zboxcore/zboxutil"
 	"github.com/0chain/s3migration/dstorage"
 	dStorageUtil "github.com/0chain/s3migration/dstorage/util"
 	"github.com/0chain/s3migration/model"
 	"github.com/0chain/s3migration/s3"
 	s3svc "github.com/0chain/s3migration/s3/service"
 	"github.com/0chain/s3migration/util"
-	"io"
 	"log"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -273,37 +269,6 @@ func (m *Migration) UploadFunc(migrationFile model.FileRef, attrs fileref.Attrib
 		return fmt.Errorf("chunk upload failed")
 	}
 	return nil
-}
-
-func startChunkedUpload(allocationObj *sdk.Allocation, fileReader io.Reader, remotePath, mimeType string, size int64, encrypt bool, attrs fileref.Attributes, statusBar sdk.StatusCallback, isUpdate bool) error {
-	remotePath = zboxutil.RemoteClean(remotePath)
-	isabs := zboxutil.IsRemoteAbs(remotePath)
-	if !isabs {
-		err := thrown.New("invalid_path", "Path should be valid and absolute")
-		return err
-	}
-	remotePath = zboxutil.GetFullRemotePath(remotePath, remotePath)
-
-	_, fileName := filepath.Split(remotePath)
-
-	fileMeta := sdk.FileMeta{
-		Path:       remotePath,
-		ActualSize: size,
-		MimeType:   mimeType,
-		RemoteName: fileName,
-		RemotePath: remotePath,
-		Attributes: attrs,
-	}
-
-	ChunkedUpload, err := sdk.CreateChunkedUpload(util.GetHomeDir(), allocationObj, fileMeta, util.NewStreamReader(fileReader), isUpdate, false,
-		sdk.WithChunkSize(sdk.DefaultChunkSize),
-		sdk.WithEncrypt(encrypt),
-		sdk.WithStatusCallback(statusBar))
-	if err != nil {
-		return err
-	}
-
-	return ChunkedUpload.Start()
 }
 
 type objectUploadStatus struct {
