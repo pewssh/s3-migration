@@ -8,6 +8,7 @@ import (
 	"github.com/0chain/gosdk/zboxcore/fileref"
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/0chain/gosdk/zboxcore/zboxutil"
+	"github.com/0chain/s3migration/dstorage"
 	dStorageUtil "github.com/0chain/s3migration/dstorage/util"
 	"github.com/0chain/s3migration/model"
 	"github.com/0chain/s3migration/s3"
@@ -49,8 +50,9 @@ type bucket struct {
 }
 
 type Migration struct {
-	allocation *sdk.Allocation
-	s3Service  s3.S3
+	allocation      *sdk.Allocation
+	s3Service       s3.S3
+	dStorageService dstorage.DStorage
 
 	//Slice of map of bucket name and prefix. If prefix is empty string then every object will be uploaded.
 	buckets      []bucket //{"bucket1": "prefix1"}
@@ -69,7 +71,7 @@ func NewMigration() *Migration {
 	return &Migration{}
 }
 
-func (m *Migration) InitMigration(ctx context.Context, allocation *sdk.Allocation, s3Service s3.S3, appConfig *model.AppConfig) error {
+func (m *Migration) InitMigration(ctx context.Context, allocation *sdk.Allocation, s3Service s3.S3, dSService dstorage.DStorage, appConfig *model.AppConfig) error {
 	m.s3Service = s3Service
 	m.allocation = allocation
 	m.whoPays = appConfig.WhoPays
@@ -77,6 +79,7 @@ func (m *Migration) InitMigration(ctx context.Context, allocation *sdk.Allocatio
 	m.resume = appConfig.Resume
 	m.skip = appConfig.Skip
 	m.concurrency = appConfig.Concurrency
+	m.dStorageService = dSService
 
 	if len(appConfig.Buckets) == 0 {
 		// list all buckets form s3 and append them to m.buckets
@@ -214,6 +217,7 @@ func (m *Migration) Migrate() error {
 					wg.Done()
 				}()
 
+				// TODO: compile list of errors for which we do not want to retry.
 				util.Retry(attemptCount, sleepDuration, func() error {
 					return m.UploadFunc(migrationFile, attrs)
 				})
@@ -251,7 +255,15 @@ func (m *Migration) UploadFunc(migrationFile model.FileRef, attrs fileref.Attrib
 
 	// TODO: Handle for error =  Upload failed as there was no commit consensus
 
-	err = startChunkedUpload(m.allocation, src.SourceFile, src.FilePath, src.FileType, src.FileSize, m.encrypt, attrs, statusBar, migrationFile.IsUpdate)
+	err = m.dStorageService.UploadToDStorage(context.Background(), m.allocation, src.SourceFile, model.DStorageUploadOptions{
+		RemotePath: src.FilePath,
+		MimeType:   src.FileType,
+		Size:       src.FileSize,
+		Encrypt:    m.encrypt,
+		Attrs:      attrs,
+		StatusBar:  statusBar,
+		IsUpdate:   migrationFile.IsUpdate,
+	})
 	if err != nil {
 		return err
 	}

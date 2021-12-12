@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	dstorageSvc "github.com/0chain/s3migration/dstorage/service"
 	"github.com/0chain/s3migration/model"
 	s3svc "github.com/0chain/s3migration/s3/service"
 	"github.com/spf13/cobra"
@@ -109,6 +110,8 @@ var migrateCmd = &cobra.Command{
 			return err
 		}
 
+		dSService := dstorageSvc.NewService()
+
 		appConfig := model.AppConfig{
 			Region:        region,
 			Skip:          skip,
@@ -122,7 +125,7 @@ var migrateCmd = &cobra.Command{
 
 		migration := controller.NewMigration()
 
-		if err := migration.InitMigration(context.Background(), allocation, s3Service, &appConfig); err != nil {
+		if err := migration.InitMigration(context.Background(), allocation, s3Service, dSService, &appConfig); err != nil {
 			return err
 		}
 

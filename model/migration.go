@@ -50,11 +50,11 @@ type S3Object struct {
 }
 
 type DStorageUploadOptions struct {
-	RemotePath    string
-	MimeType      string
-	Size          int64
-	Encrypt       bool
-	Attrs         fileref.Attributes
-	StatusBar     sdk.StatusCallback
-	IsUpdate      bool
+	RemotePath string
+	MimeType   string
+	Size       int64
+	Encrypt    bool
+	Attrs      fileref.Attributes
+	StatusBar  sdk.StatusCallback
+	IsUpdate   bool
 }
