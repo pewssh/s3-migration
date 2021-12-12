@@ -3,9 +3,9 @@ package service
 import (
 	"context"
 	thrown "github.com/0chain/errors"
-	"github.com/0chain/gosdk/zboxcore/fileref"
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/0chain/gosdk/zboxcore/zboxutil"
+	"github.com/0chain/s3migration/model"
 	"github.com/0chain/s3migration/util"
 	"io"
 	"path/filepath"
@@ -18,8 +18,8 @@ func NewService() *Service {
 	return &Service{}
 }
 
-func (s *Service) DStorageUpload(ctx context.Context, allocationObj *sdk.Allocation, fileReader io.Reader, remotePath, mimeType string, size int64, encrypt bool, attrs fileref.Attributes, statusBar sdk.StatusCallback, isUpdate bool) error {
-	remotePath = zboxutil.RemoteClean(remotePath)
+func (s *Service) UploadToDStorage(ctx context.Context, allocationObj *sdk.Allocation, fileReader io.Reader, options model.DStorageUploadOptions) error {
+	remotePath := zboxutil.RemoteClean(options.RemotePath)
 	isAbs := zboxutil.IsRemoteAbs(remotePath)
 	if !isAbs {
 		err := thrown.New("invalid_path", "Path should be valid and absolute")
@@ -31,17 +31,17 @@ func (s *Service) DStorageUpload(ctx context.Context, allocationObj *sdk.Allocat
 
 	fileMeta := sdk.FileMeta{
 		Path:       remotePath,
-		ActualSize: size,
-		MimeType:   mimeType,
+		ActualSize: options.Size,
+		MimeType:   options.MimeType,
 		RemoteName: fileName,
 		RemotePath: remotePath,
-		Attributes: attrs,
+		Attributes: options.Attrs,
 	}
 
-	ChunkedUpload, err := sdk.CreateChunkedUpload(util.GetHomeDir(), allocationObj, fileMeta, util.NewStreamReader(fileReader), isUpdate, false,
+	ChunkedUpload, err := sdk.CreateChunkedUpload(util.GetHomeDir(), allocationObj, fileMeta, util.NewStreamReader(fileReader), options.IsUpdate, false,
 		sdk.WithChunkSize(sdk.DefaultChunkSize),
-		sdk.WithEncrypt(encrypt),
-		sdk.WithStatusCallback(statusBar))
+		sdk.WithEncrypt(options.Encrypt),
+		sdk.WithStatusCallback(options.StatusBar))
 	if err != nil {
 		return err
 	}

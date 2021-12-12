@@ -1,6 +1,8 @@
 package model
 
 import (
+	"github.com/0chain/gosdk/zboxcore/fileref"
+	"github.com/0chain/gosdk/zboxcore/sdk"
 	"io"
 	"sync"
 	"time"
@@ -45,4 +47,14 @@ type S3Object struct {
 	FileType   string
 	FileSize   int64
 	FilePath   string
+}
+
+type DStorageUploadOptions struct {
+	RemotePath    string
+	MimeType      string
+	Size          int64
+	Encrypt       bool
+	Attrs         fileref.Attributes
+	StatusBar     sdk.StatusCallback
+	IsUpdate      bool
 }

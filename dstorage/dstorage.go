@@ -1,5 +1,12 @@
 package dstorage
 
+import (
+	"context"
+	"github.com/0chain/gosdk/zboxcore/sdk"
+	"github.com/0chain/s3migration/model"
+	"io"
+)
+
 //use rate limiter here.
 //All upload should go through this file so you can limit rate of upload request so you don't get blocked by blobber.
 //Its better to put rate limit value in some variable; check rate limit of all blobbers and put rate limit value of the blobber that has minimum capacity.
@@ -14,4 +21,5 @@ package dstorage
 //So lets put commit request in a queue(use channel) and try three times. If it fails to commit then save state of all bucket and abort the program.
 
 type DStorage interface {
+	UploadToDStorage(ctx context.Context, allocationObj *sdk.Allocation, fileReader io.Reader, options model.DStorageUploadOptions) error
 }
