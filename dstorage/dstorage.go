@@ -1,10 +1,8 @@
-package dstorage
+package dStorage
 
 import (
-	"context"
+	"github.com/0chain/gosdk/core/common"
 	"github.com/0chain/gosdk/zboxcore/sdk"
-	"github.com/0chain/s3migration/model"
-	"io"
 )
 
 //use rate limiter here.
@@ -20,6 +18,57 @@ import (
 //We also need to be careful about committing upload. There might be race between committing request resulting in commit failure.
 //So lets put commit request in a queue(use channel) and try three times. If it fails to commit then save state of all bucket and abort the program.
 
-type DStorage interface {
-	UploadToDStorage(ctx context.Context, allocationObj *sdk.Allocation, fileReader io.Reader, options model.DStorageUploadOptions) error
+type DStoreI interface {
+	Download()
+	GetFileMetaData()
+	Delete()
+	Replace()
+	Duplicate()
+	IsFileExist(fPath string) bool
+}
+
+type DStorageService struct {
+	allocation *sdk.Allocation
+	encrypt    bool // Should encrypt before uploading/updating
+	//After file is available in dStorage owner can decide who is going to pay for read
+	whoPays common.WhoPays
+	//Where to migrate all buckets to. Default is /
+	migrateTo string
+}
+
+func (d *DStorageService) Download() {
+
+}
+func (d *DStorageService) GetFileMetaData() {
+
+}
+
+func (d *DStorageService) Delete() {
+
+}
+
+func (d *DStorageService) Replace() {
+
+}
+
+func (d *DStorageService) Duplicate() {
+
+}
+
+func (d *DStorageService) IsFileExist(fPath string) bool {
+	return false
+}
+
+func GetDStorageService(allocationID, migrateTo string, encrypt bool, whoPays int) (*DStorageService, error) {
+	allocation, err := sdk.GetAllocation(allocationID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &DStorageService{
+		allocation: allocation,
+		encrypt:    encrypt,
+		whoPays:    common.WhoPays(whoPays),
+		migrateTo:  migrateTo,
+	}, nil
 }

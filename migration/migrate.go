@@ -3,10 +3,8 @@ package migration
 import (
 	"context"
 	"fmt"
-	"time"
 
-	"github.com/0chain/gosdk/zboxcore/sdk"
-	"github.com/0chain/s3migration/dstorage"
+	dStorage "github.com/0chain/s3migration/dstorage"
 	"github.com/0chain/s3migration/s3"
 )
 
@@ -39,13 +37,11 @@ type bucket struct {
 }
 
 type Migration struct {
-	allocation      *sdk.Allocation
-	s3Service       s3.S3
-	dStorageService dstorage.DStorage
+	zStore   dStorage.DStoreI
+	awsStore s3.AwsI
 
 	//Slice of map of bucket name and prefix. If prefix is empty string then every object will be uploaded.
 	//If buckets is empty; migrate all buckets
-	buckets      []bucket //{"bucket1": "prefix1"}
 	bucketStates []map[string]*MigrationState
 
 	resume     bool
@@ -53,42 +49,33 @@ type Migration struct {
 	retryCount int
 
 	//Number of goroutines to run. So at most concurrency * Batch goroutines will run. i.e. for bucket level and object level
-	concurrency          int
-	whoPays              int
-	encrypt              bool
-	newerThan, olderThan time.Time
-	ctx                  context.Context
+	concurrency int
 }
 
-func InitMigration(appConfig *MigrationConfig) error {
+func InitMigration(mConfig *MigrationConfig) error {
+	dStorageService, err := dStorage.GetDStorageService(mConfig.AllocationID, mConfig.MigrateToPath, mConfig.Encrypt, mConfig.WhoPays)
+	if err != nil {
+		return err
+	}
 
-	//init sdk
-	//get allocation
-	//get s3 client
+	awsStorageService, err := s3.GetAwsClient(mConfig.Buckets, mConfig.DeleteSource, mConfig.NewerThan, mConfig.OlderThan)
+	if err != nil {
+		return err
+	}
+
 	migration = Migration{
-		whoPays:     appConfig.WhoPays,
-		encrypt:     appConfig.Encrypt,
-		resume:      appConfig.Resume,
-		skip:        appConfig.Skip,
-		concurrency: appConfig.Concurrency,
-		retryCount:  appConfig.RetryCount,
-		newerThan:   appConfig.NewerThan,
-		olderThan:   appConfig.OlderThan,
+		zStore:      dStorageService,
+		awsStore:    awsStorageService,
+		resume:      mConfig.Resume,
+		skip:        mConfig.Skip,
+		concurrency: mConfig.Concurrency,
+		retryCount:  mConfig.RetryCount,
 	}
 
 	rootContext, rootContextCancel = context.WithCancel(context.Background())
 
 	isMigrationInitialized = true
 
-	return nil
-}
-
-func Migrate() error {
-	defer rootContextCancel()
-
-	if !isMigrationInitialized {
-		return fmt.Errorf("migration is not initialized")
-	}
 	return nil
 }
 
@@ -133,17 +120,12 @@ func (ms *MigrationState) saveState() {
 	//Check objectUploadStatus
 }
 
-type MigrationConfig struct {
-	AllocationID  string
-	Skip          int
-	Resume        bool
-	Concurrency   int
-	Buckets       []string
-	Region        string
-	MigrateToPath string
-	WhoPays       int
-	Encrypt       bool
-	RetryCount    int
-	NewerThan     time.Time
-	OlderThan     time.Time
+func Migrate() error {
+	defer rootContextCancel()
+
+	if !isMigrationInitialized {
+		return fmt.Errorf("migration is not initialized")
+	}
+
+	return nil
 }

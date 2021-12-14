@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/0chain/s3migration/migration"
@@ -28,6 +29,7 @@ var (
 	newerThanStr, olderThanStr string
 	awsCredPath                string
 	retryCount                 int
+	deleteSource               bool
 )
 
 // migrateCmd is the migrateFromS3 sub command to migrate whole objects from some buckets.
@@ -46,6 +48,7 @@ func init() {
 	migrateCmd.PersistentFlags().StringSliceVar(&buckets, "buckets", []string{}, "specific s3 buckets to use. Use bucketName:prefix "+
 		"format if prefix filter is required or only bucketName for migrating all objects. If no value is provided all buckets will be migrated")
 	migrateCmd.Flags().StringVar(&migrateToPath, "migrate-to", "/", "Remote path where buckets will be migrated to")
+	migrateCmd.Flags().BoolVar(&deleteSource, "delete-source", false, "Delete object in s3 that is migrated to dStorage")
 	migrateCmd.Flags().StringVar(&awsCredPath, "aws-cred-path", "", "File Path to aws credentials")
 
 	migrateCmd.Flags().IntVar(&concurrency, "concurrency", 10, "number of concurrent files to process concurrently during migration")
@@ -90,7 +93,7 @@ var migrateCmd = &cobra.Command{
 		if accessKey == "" || secretKey == "" {
 			if accessKey, secretKey = util.GetAwsCredentialsFromEnv(); accessKey == "" || secretKey == "" {
 				if awsCredPath == "" {
-					return errors.New("aws credentials path missing.")
+					return errors.New("aws credentials path missing")
 				}
 				if accessKey, secretKey = util.GetAwsCredentialsFromFile(awsCredPath); accessKey == "" || secretKey == "" {
 					return fmt.Errorf("empty access or secret key. Access Key:%v\tSecret Key: %v", accessKey, secretKey)
@@ -98,16 +101,17 @@ var migrateCmd = &cobra.Command{
 			}
 		}
 
-		if err := util.SetAwsEnvCredentials(accessKey, secretKey); err != nil {
-			return err
-		}
-
-		if buckets == nil { //nil means all bucket from the account
-			buckets = util.GetBucketsFromFile(awsCredPath) // if buckets is nil, migrate all buckets in root dir
-		}
-
 		if skip < 0 || skip > 2 {
 			return fmt.Errorf("skip value not in range 0-2. Provided value is %v", skip)
+		}
+
+		if buckets == nil {
+			buckets = util.GetBucketsFromFile(awsCredPath)
+		}
+
+		bktArr, err := splitIntoBucketNameAndPrefix(buckets)
+		if err != nil {
+			return err
 		}
 
 		newerThan, err := getTimeFromDHString(newerThanStr)
@@ -117,6 +121,10 @@ var migrateCmd = &cobra.Command{
 
 		olderThan, err := getTimeFromDHString(olderThanStr)
 		if err != nil {
+			return err
+		}
+
+		if err := util.SetAwsEnvCredentials(accessKey, secretKey); err != nil {
 			return err
 		}
 
@@ -131,13 +139,14 @@ var migrateCmd = &cobra.Command{
 			Skip:          skip,
 			Resume:        resume,
 			Concurrency:   concurrency,
-			Buckets:       buckets,
+			Buckets:       bktArr,
 			MigrateToPath: migrateToPath,
 			WhoPays:       whoPays,
 			Encrypt:       encrypt,
 			RetryCount:    retryCount,
 			NewerThan:     newerThan,
 			OlderThan:     olderThan,
+			DeleteSource:  deleteSource,
 		}
 
 		if err := migration.InitMigration(&mConfig); err != nil {
@@ -165,5 +174,26 @@ func getTimeFromDHString(s string) (t time.Time, err error) {
 	duration := time.Hour*24*time.Duration(days) + time.Hour*time.Duration(hours)
 	t = time.Now().Add(-duration)
 
+	return
+}
+
+func splitIntoBucketNameAndPrefix(buckets []string) (bucketArr [][2]string, err error) {
+	for _, bkt := range buckets {
+		res := strings.Split(bkt, ":")
+		l := len(res)
+		if l < 1 || l > 2 {
+			err = fmt.Errorf("bucket flag has fields less than 1 or greater than 2. Arg \"%v\"", bkt)
+			return
+		}
+
+		var bucket [2]string
+		bucket[0] = res[0]
+
+		if l == 2 {
+			bucket[1] = res[1]
+		}
+
+		bucketArr = append(bucketArr, bucket)
+	}
 	return
 }

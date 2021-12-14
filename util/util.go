@@ -19,7 +19,7 @@ const (
 )
 
 // GetConfigDir get config directory , default is ~/.zcn/
-func GetConfigDir() string {
+func GetDefaultConfigDir() string {
 	configDir := filepath.Join(GetHomeDir(), ".zcn")
 	if err := os.MkdirAll(configDir, 0744); err != nil {
 		fmt.Println(err)
