@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,9 +20,7 @@ const (
 
 // GetConfigDir get config directory , default is ~/.zcn/
 func GetConfigDir() string {
-
-	configDir := GetHomeDir() + string(os.PathSeparator) + ".zcn"
-
+	configDir := filepath.Join(GetHomeDir(), ".zcn")
 	if err := os.MkdirAll(configDir, 0744); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -32,7 +31,6 @@ func GetConfigDir() string {
 
 // GetHomeDir Find home directory.
 func GetHomeDir() string {
-	// Find home directory.
 	idr, err := homedir.Dir()
 	if err != nil {
 		fmt.Println(err)
@@ -48,8 +46,6 @@ func GetAllocationIDFromFile(allocPath string) (allocationId string, err error) 
 	if err != nil {
 		return
 	}
-
-	//return strings.TrimSpace(string(b))
 
 	return strings.ReplaceAll(strings.ReplaceAll(string(b), "\n", ""), " ", ""), nil
 }
@@ -94,7 +90,11 @@ func GetBucketsFromFile(credPath string) (buckets []string) {
 }
 
 func GetAllocationIDFromEnv() string {
-	return os.Getenv("ALLOC")
+	return os.Getenv("ALLOCATION_ID")
+}
+
+func GetAwsCredentialsFromEnv() (string, string) {
+	return os.Getenv("AWS_ACCESS_KEY"), os.Getenv("AWS_SECRET_KEY")
 }
 
 // readLines reads a whole file into memory
@@ -112,28 +112,6 @@ func readLines(path string) ([]string, error) {
 		lines = append(lines, scanner.Text())
 	}
 	return lines, scanner.Err()
-}
-
-func TrimSuffixPrefix(in, sp string) string {
-	for {
-		if strings.HasPrefix(in, sp) {
-			in = strings.TrimPrefix(in, sp)
-			continue
-		}
-
-		break
-	}
-
-	for {
-		if strings.HasSuffix(in, sp) {
-			in = strings.TrimSuffix(in, sp)
-			continue
-		}
-
-		break
-	}
-
-	return in
 }
 
 func ConvertGoSDKTimeToTime(in string) time.Time {

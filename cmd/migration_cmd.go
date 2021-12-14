@@ -1,33 +1,33 @@
 package cmd
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	dstorageSvc "github.com/0chain/s3migration/dstorage/service"
-	"github.com/0chain/s3migration/model"
-	s3svc "github.com/0chain/s3migration/s3/service"
+	"regexp"
+	"strconv"
+	"time"
+
+	"github.com/0chain/s3migration/migration"
 	"github.com/spf13/cobra"
 
-	"github.com/0chain/gosdk/zboxcore/sdk"
-	"github.com/0chain/s3migration/controller"
 	"github.com/0chain/s3migration/util"
 )
 
 var (
-	allocationId         string
-	accessKey, secretKey string
-	buckets              []string
-	migrateToPath        string
-	concurrency          int
-	encrypt              bool
-	resume               bool
-	skip                 int // 0 --> Replace; 1 --> Skip; 2 --> Duplicate
-	region               string
-	allocationTextPath   string
-	whoPays              string
-	awsCredPath          string
-	retryCount           int
+	allocationId               string
+	accessKey, secretKey       string
+	buckets                    []string
+	migrateToPath              string
+	concurrency                int
+	encrypt                    bool
+	resume                     bool
+	skip                       int // 0 --> Replace; 1 --> Skip; 2 --> Duplicate
+	region                     string
+	allocationTextPath         string
+	ownerPays                  bool
+	newerThanStr, olderThanStr string
+	awsCredPath                string
+	retryCount                 int
 )
 
 // migrateCmd is the migrateFromS3 sub command to migrate whole objects from some buckets.
@@ -37,13 +37,14 @@ func init() {
 	//flags related to dStorage
 	migrateCmd.PersistentFlags().StringVar(&allocationId, "allocation", "", "allocation ID for dStorage")
 	migrateCmd.Flags().StringVar(&allocationTextPath, "alloc-path", "alloc-path", "File Path to allocation text")
-	migrateCmd.Flags().StringVar(&whoPays, "attr-who-pays-for-reads", "", "Read payment source")
+	migrateCmd.Flags().BoolVar(&ownerPays, "owner-pays", false, "Read payment source(Default: owner pays)")
 	migrateCmd.Flags().BoolVar(&encrypt, "encrypt", false, "pass this option to encrypt and upload the file")
 	//flags related to s3
 	migrateCmd.PersistentFlags().StringVar(&accessKey, "access-key", "", "access-key of aws")
 	migrateCmd.PersistentFlags().StringVar(&secretKey, "secret-key", "", "secret-key of aws")
 	migrateCmd.PersistentFlags().StringVar(&region, "region", "", "region of s3 buckets")
-	migrateCmd.PersistentFlags().StringSliceVar(&buckets, "buckets", []string{}, "specific s3 buckets to use. Use bucketName:prefix format if prefix filter is required or only bucketName for migrating all objects")
+	migrateCmd.PersistentFlags().StringSliceVar(&buckets, "buckets", []string{}, "specific s3 buckets to use. Use bucketName:prefix "+
+		"format if prefix filter is required or only bucketName for migrating all objects. If no value is provided all buckets will be migrated")
 	migrateCmd.Flags().StringVar(&migrateToPath, "migrate-to", "/", "Remote path where buckets will be migrated to")
 	migrateCmd.Flags().StringVar(&awsCredPath, "aws-cred-path", "", "File Path to aws credentials")
 
@@ -51,6 +52,9 @@ func init() {
 	migrateCmd.Flags().BoolVar(&resume, "resume", false, "pass this option to resume migration from previous state")
 	migrateCmd.Flags().IntVar(&skip, "skip", 1, "0 --> Replace existing files; 1 --> Skip migration; 2 --> Duplicate")
 	migrateCmd.Flags().IntVar(&retryCount, "retry", 3, "retry count for upload to dstorage")
+	migrateCmd.Flags().StringVar(&newerThanStr, "newer-than", "", "eg; 7d10h --> migrate objects that is newer than 7 days 10 hours")
+	migrateCmd.Flags().StringVar(&olderThanStr, "older-than", "", "eg; 7d10h --> migrate objects that is older than 7 days 10 hours")
+
 }
 
 var migrateCmd = &cobra.Command{
@@ -67,8 +71,7 @@ var migrateCmd = &cobra.Command{
 		cmd.Flags().Parse(args)
 		var err error
 		if allocationId == "" {
-			allocationId = util.GetAllocationIDFromEnv()
-			if allocationId == "" {
+			if allocationId = util.GetAllocationIDFromEnv(); allocationId == "" {
 				if allocationTextPath == "" {
 					return errors.New("allocation text file not passed in argument")
 				}
@@ -77,24 +80,29 @@ var migrateCmd = &cobra.Command{
 				if err != nil {
 					return err
 				}
-			}
 
-			if allocationId == "" {
-				return errors.New("allocation id is missing")
+				if allocationId == "" {
+					return errors.New("allocation id is missing")
+				}
 			}
 		}
 
 		if accessKey == "" || secretKey == "" {
-			accessKey, secretKey = util.GetAwsCredentialsFromFile(awsCredPath)
-		}
-
-		if accessKey != "" && secretKey != "" {
-			if err := util.SetAwsEnvCredentials(accessKey, secretKey); err != nil {
-				return fmt.Errorf("failed to set aws custom credentials")
+			if accessKey, secretKey = util.GetAwsCredentialsFromEnv(); accessKey == "" || secretKey == "" {
+				if awsCredPath == "" {
+					return errors.New("aws credentials path missing.")
+				}
+				if accessKey, secretKey = util.GetAwsCredentialsFromFile(awsCredPath); accessKey == "" || secretKey == "" {
+					return fmt.Errorf("empty access or secret key. Access Key:%v\tSecret Key: %v", accessKey, secretKey)
+				}
 			}
 		}
 
-		if buckets == nil {
+		if err := util.SetAwsEnvCredentials(accessKey, secretKey); err != nil {
+			return err
+		}
+
+		if buckets == nil { //nil means all bucket from the account
 			buckets = util.GetBucketsFromFile(awsCredPath) // if buckets is nil, migrate all buckets in root dir
 		}
 
@@ -102,19 +110,23 @@ var migrateCmd = &cobra.Command{
 			return fmt.Errorf("skip value not in range 0-2. Provided value is %v", skip)
 		}
 
-		allocation, err := sdk.GetAllocation(allocationId)
+		newerThan, err := getTimeFromDHString(newerThanStr)
 		if err != nil {
 			return err
 		}
 
-		s3Service, err := s3svc.NewService(region)
+		olderThan, err := getTimeFromDHString(olderThanStr)
 		if err != nil {
 			return err
 		}
 
-		dSService := dstorageSvc.NewService()
+		var whoPays int
+		if !ownerPays {
+			whoPays = 1
+		}
 
-		appConfig := model.AppConfig{
+		mConfig := migration.MigrationConfig{
+			AllocationID:  allocationId,
 			Region:        region,
 			Skip:          skip,
 			Resume:        resume,
@@ -124,14 +136,34 @@ var migrateCmd = &cobra.Command{
 			WhoPays:       whoPays,
 			Encrypt:       encrypt,
 			RetryCount:    retryCount,
+			NewerThan:     newerThan,
+			OlderThan:     olderThan,
 		}
 
-		migration := controller.NewMigration()
-
-		if err := migration.InitMigration(context.Background(), allocation, s3Service, dSService, &appConfig); err != nil {
+		if err := migration.InitMigration(&mConfig); err != nil {
 			return err
 		}
 
 		return migration.Migrate()
 	},
+}
+
+//getTimeFromDHString get timestamp before days and hours mentioned in string; eg 7d10h.
+func getTimeFromDHString(s string) (t time.Time, err error) {
+	dhReg := `^(([0-9]*)d)?(([0-9]*)h)?$` //day hour regex; matches strings like: 7d10h, etc.
+	re := regexp.MustCompile(dhReg)
+
+	if !re.Match([]byte(s)) {
+		err = fmt.Errorf("input string doesn't match regex %v", dhReg)
+		return
+	}
+
+	res := re.FindSubmatch([]byte(s))
+	days, _ := strconv.Atoi(string(res[2]))
+	hours, _ := strconv.Atoi(string(res[4]))
+
+	duration := time.Hour*24*time.Duration(days) + time.Hour*time.Duration(hours)
+	t = time.Now().Add(-duration)
+
+	return
 }
