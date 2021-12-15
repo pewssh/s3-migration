@@ -15,13 +15,17 @@ type bucket struct {
 }
 
 type AwsClient struct {
+	bucket       string
+	prefix       string
+	region       string
+	startAfter   string
 	deleteSource bool
 	newerThan    time.Time
 	olderThan    time.Time
 	buckets      []bucket
 }
 
-func GetAwsClient(buckets [][2]string, deleteSource bool, newerThan, olderThan time.Time) (*AwsClient, error) {
+func GetAwsClient(bucket, prefix, region string, deleteSource bool, newerThan, olderThan time.Time, startAfter string) (*AwsClient, error) {
 	awsClient := new(AwsClient)
 	//Get a client; if error return error else return aws client
 	//buckets comes as slice of array([bucketname, prefix]). Find location and put all of them
