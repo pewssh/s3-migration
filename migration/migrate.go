@@ -30,12 +30,6 @@ func abandonAllOperations() {
 	rootContextCancel()
 }
 
-type bucket struct {
-	name   string
-	region string
-	prefix string
-}
-
 type Migration struct {
 	zStore   dStorage.DStoreI
 	awsStore s3.AwsI
@@ -44,7 +38,6 @@ type Migration struct {
 	//If buckets is empty; migrate all buckets
 	bucketStates []map[string]*MigrationState
 
-	resume     bool
 	skip       int
 	retryCount int
 
@@ -58,7 +51,15 @@ func InitMigration(mConfig *MigrationConfig) error {
 		return err
 	}
 
-	awsStorageService, err := s3.GetAwsClient(mConfig.Buckets, mConfig.DeleteSource, mConfig.NewerThan, mConfig.OlderThan)
+	awsStorageService, err := s3.GetAwsClient(
+		mConfig.Bucket,
+		mConfig.Prefix,
+		mConfig.Region,
+		mConfig.DeleteSource,
+		mConfig.NewerThan,
+		mConfig.OlderThan,
+		mConfig.StartAfter,
+	)
 	if err != nil {
 		return err
 	}
@@ -66,7 +67,6 @@ func InitMigration(mConfig *MigrationConfig) error {
 	migration = Migration{
 		zStore:      dStorageService,
 		awsStore:    awsStorageService,
-		resume:      mConfig.Resume,
 		skip:        mConfig.Skip,
 		concurrency: mConfig.Concurrency,
 		retryCount:  mConfig.RetryCount,

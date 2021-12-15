@@ -5,10 +5,10 @@ import "time"
 type MigrationConfig struct {
 	AllocationID  string
 	Skip          int
-	Resume        bool
 	Concurrency   int
-	Buckets       [][2]string
+	Bucket        string
 	Region        string
+	Prefix        string
 	MigrateToPath string
 	WhoPays       int
 	Encrypt       bool
@@ -16,4 +16,5 @@ type MigrationConfig struct {
 	NewerThan     time.Time
 	OlderThan     time.Time
 	DeleteSource  bool
+	StartAfter    string
 }

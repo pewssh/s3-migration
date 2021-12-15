@@ -3,6 +3,8 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,13 +19,14 @@ import (
 var (
 	allocationId               string
 	accessKey, secretKey       string
-	buckets                    []string
+	bucket                     string
+	prefix                     string
+	region                     string
 	migrateToPath              string
 	concurrency                int
 	encrypt                    bool
 	resume                     bool
 	skip                       int // 0 --> Replace; 1 --> Skip; 2 --> Duplicate
-	region                     string
 	allocationTextPath         string
 	ownerPays                  bool
 	newerThanStr, olderThanStr string
@@ -44,9 +47,9 @@ func init() {
 	//flags related to s3
 	migrateCmd.PersistentFlags().StringVar(&accessKey, "access-key", "", "access-key of aws")
 	migrateCmd.PersistentFlags().StringVar(&secretKey, "secret-key", "", "secret-key of aws")
-	migrateCmd.PersistentFlags().StringVar(&region, "region", "", "region of s3 buckets")
-	migrateCmd.PersistentFlags().StringSliceVar(&buckets, "buckets", []string{}, "specific s3 buckets to use. Use bucketName:prefix "+
-		"format if prefix filter is required or only bucketName for migrating all objects. If no value is provided all buckets will be migrated")
+	migrateCmd.PersistentFlags().StringVar(&bucket, "bucket", "", "Bucket to migrate")
+	migrateCmd.PersistentFlags().StringVar(&prefix, "prefix", "", "Migrate objects starting with this prefix")
+	migrateCmd.PersistentFlags().StringVar(&region, "region", "us-east-2", "Bucket location")
 	migrateCmd.Flags().StringVar(&migrateToPath, "migrate-to", "/", "Remote path where buckets will be migrated to")
 	migrateCmd.Flags().BoolVar(&deleteSource, "delete-source", false, "Delete object in s3 that is migrated to dStorage")
 	migrateCmd.Flags().StringVar(&awsCredPath, "aws-cred-path", "", "File Path to aws credentials")
@@ -101,17 +104,15 @@ var migrateCmd = &cobra.Command{
 			}
 		}
 
+		if bucket == "" {
+			bucket, region, prefix, err = util.GetBucketRegionPrefixFromFile(awsCredPath)
+			if err != nil {
+				return err
+			}
+		}
+
 		if skip < 0 || skip > 2 {
 			return fmt.Errorf("skip value not in range 0-2. Provided value is %v", skip)
-		}
-
-		if buckets == nil {
-			buckets = util.GetBucketsFromFile(awsCredPath)
-		}
-
-		bktArr, err := splitIntoBucketNameAndPrefix(buckets)
-		if err != nil {
-			return err
 		}
 
 		newerThan, err := getTimeFromDHString(newerThanStr)
@@ -122,6 +123,24 @@ var migrateCmd = &cobra.Command{
 		olderThan, err := getTimeFromDHString(olderThanStr)
 		if err != nil {
 			return err
+		}
+
+		var startAfter string
+		if resume {
+			stateFilePath := migration.StateFilePath(util.GetHomeDir(), bucket)
+			f, err := os.Open(stateFilePath)
+			if err != nil && errors.Is(err, os.ErrNotExist) {
+			} else if err != nil {
+				return err
+			} else {
+				b, err := io.ReadAll(f)
+				if err != nil {
+					return err
+				}
+
+				startAfter = string(b)
+				startAfter = strings.ReplaceAll(strings.ReplaceAll(startAfter, " ", ""), "\n", "")
+			}
 		}
 
 		if err := util.SetAwsEnvCredentials(accessKey, secretKey); err != nil {
@@ -137,9 +156,9 @@ var migrateCmd = &cobra.Command{
 			AllocationID:  allocationId,
 			Region:        region,
 			Skip:          skip,
-			Resume:        resume,
 			Concurrency:   concurrency,
-			Buckets:       bktArr,
+			Bucket:        bucket,
+			Prefix:        prefix,
 			MigrateToPath: migrateToPath,
 			WhoPays:       whoPays,
 			Encrypt:       encrypt,
@@ -147,6 +166,7 @@ var migrateCmd = &cobra.Command{
 			NewerThan:     newerThan,
 			OlderThan:     olderThan,
 			DeleteSource:  deleteSource,
+			StartAfter:    startAfter,
 		}
 
 		if err := migration.InitMigration(&mConfig); err != nil {

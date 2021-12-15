@@ -75,17 +75,18 @@ func GetAwsCredentialsFromFile(credPath string) (accessKey, secretKey string) {
 	return
 }
 
-func GetBucketsFromFile(credPath string) (buckets []string) {
+func GetBucketRegionPrefixFromFile(credPath string) (bucket, region, prefix string, err error) {
 	v := viper.New()
 
 	v.AddConfigPath(credPath)
 	v.SetConfigType("yaml")
-	if err := v.ReadInConfig(); err != nil {
-		return nil
+	if err = v.ReadInConfig(); err != nil {
+		return
 	}
 
-	buckets = v.GetStringSlice("buckets")
-
+	bucket = v.GetString("bucket")
+	region = v.GetString("region")
+	prefix = v.GetString("prefix")
 	return
 }
 
