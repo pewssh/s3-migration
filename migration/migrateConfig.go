@@ -17,4 +17,5 @@ type MigrationConfig struct {
 	OlderThan     time.Time
 	DeleteSource  bool
 	StartAfter    string
+	StateFilePath string
 }
