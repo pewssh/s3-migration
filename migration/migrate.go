@@ -3,6 +3,8 @@ package migration
 import (
 	"context"
 	"fmt"
+	"os"
+	"sync"
 
 	dStorage "github.com/0chain/s3migration/dstorage"
 	"github.com/0chain/s3migration/s3"
@@ -43,6 +45,10 @@ type Migration struct {
 
 	//Number of goroutines to run. So at most concurrency * Batch goroutines will run. i.e. for bucket level and object level
 	concurrency int
+
+	migratedSize uint64
+
+	stateFilePath string
 }
 
 func InitMigration(mConfig *MigrationConfig) error {
@@ -65,11 +71,12 @@ func InitMigration(mConfig *MigrationConfig) error {
 	}
 
 	migration = Migration{
-		zStore:      dStorageService,
-		awsStore:    awsStorageService,
-		skip:        mConfig.Skip,
-		concurrency: mConfig.Concurrency,
-		retryCount:  mConfig.RetryCount,
+		zStore:        dStorageService,
+		awsStore:      awsStorageService,
+		skip:          mConfig.Skip,
+		concurrency:   mConfig.Concurrency,
+		retryCount:    mConfig.RetryCount,
+		stateFilePath: mConfig.StateFilePath,
 	}
 
 	rootContext, rootContextCancel = context.WithCancel(context.Background())
@@ -120,6 +127,12 @@ func (ms *MigrationState) saveState() {
 	//Check objectUploadStatus
 }
 
+type migratingObjStatus struct {
+	objectKey string
+	successCh chan struct{}
+	errCh     chan error
+}
+
 func Migrate() error {
 	defer rootContextCancel()
 
@@ -127,5 +140,118 @@ func Migrate() error {
 		return fmt.Errorf("migration is not initialized")
 	}
 
+	updateState, err := updateStateKey(migration.stateFilePath)
+	if err != nil {
+		return fmt.Errorf("could not create state file path. Error: %v", err)
+	}
+	objCh, _ := migration.awsStore.ListFilesInBucket(rootContext)
+	// if err != nil {
+	// 	return err
+	// }
+
+	count := 0
+	batchCount := 1
+	wg := sync.WaitGroup{}
+
+	migrationStatuses := make([]*migratingObjStatus, 10)
+	for _, ms := range migrationStatuses {
+		ms.successCh = make(chan struct{}, 1)
+		ms.errCh = make(chan error, 1)
+	}
+
+	for obj := range objCh {
+		status := migrationStatuses[count]
+		wg.Add(1)
+
+		go func(status *migratingObjStatus, obj interface{}) {
+			defer wg.Done()
+		}(status, obj)
+
+		count++
+
+		if count == 10 {
+			batchCount++
+
+			wg.Wait()
+
+			stateKey, unresolvedError := checkStatuses(migrationStatuses)
+
+			if unresolvedError {
+				//break migration
+				abandonAllOperations()
+			}
+
+			//log statekey
+			updateState(stateKey)
+			count = 0
+		}
+
+	}
+	wg.Wait()
 	return nil
+}
+
+func checkStatuses(statuses []*migratingObjStatus) (stateKey string, unresolvedError bool) {
+	for _, mgrtStatus := range statuses {
+		select {
+		case <-mgrtStatus.successCh:
+			stateKey = mgrtStatus.objectKey
+
+		case err := <-mgrtStatus.errCh:
+			unresolvedError = true
+			if resolveError(mgrtStatus.objectKey, err) {
+				stateKey = mgrtStatus.objectKey
+				unresolvedError = false
+			} else {
+				break
+			}
+		}
+	}
+
+	return
+}
+
+func resolveError(objectKey string, err error) (isErrorResolved bool) {
+	switch err.(type) {
+
+	}
+
+	return
+}
+
+func updateStateKey(statePath string) (func(stateKey string), error) {
+	f, err := os.Create(statePath)
+	if err != nil {
+		return nil, err
+	}
+	var errorWhileWriting bool
+	return func(stateKey string) {
+		if errorWhileWriting {
+			f, err = os.Create(statePath)
+			if err != nil {
+				return
+			}
+			_, err = f.Write([]byte(stateKey))
+			if err != nil {
+				return
+			}
+			errorWhileWriting = false
+		}
+
+		err = f.Truncate(0)
+		if err != nil {
+			errorWhileWriting = true
+			return
+		}
+		_, err = f.Seek(0, 0)
+		if err != nil {
+			errorWhileWriting = true
+			return
+		}
+
+		_, err = f.Write([]byte(stateKey))
+		if err != nil {
+			errorWhileWriting = true
+		}
+	}, nil
 }
