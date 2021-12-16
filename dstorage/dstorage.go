@@ -25,6 +25,8 @@ type DStoreI interface {
 	Replace()
 	Duplicate()
 	IsFileExist(fPath string) bool
+	GetAvailableSpace() uint64
+	GetTotalSpace() uint64
 }
 
 type DStorageService struct {
@@ -33,7 +35,9 @@ type DStorageService struct {
 	//After file is available in dStorage owner can decide who is going to pay for read
 	whoPays common.WhoPays
 	//Where to migrate all buckets to. Default is /
-	migrateTo string
+	migrateTo      string
+	availableSpace uint64
+	totalSpace     uint64
 }
 
 func (d *DStorageService) Download() {
@@ -59,8 +63,18 @@ func (d *DStorageService) IsFileExist(fPath string) bool {
 	return false
 }
 
+func (d *DStorageService) GetAvailableSpace() uint64 {
+	// allocationdetails := getallocationdetailsfrom0chain()
+	return d.availableSpace
+}
+
+func (d *DStorageService) GetTotalSpace() uint64 {
+	return d.totalSpace
+}
+
 func GetDStorageService(allocationID, migrateTo string, encrypt bool, whoPays int) (*DStorageService, error) {
 	allocation, err := sdk.GetAllocation(allocationID)
+
 	if err != nil {
 		return nil, err
 	}
