@@ -292,12 +292,12 @@ func migrateObject(wg *sync.WaitGroup, objectKey string, status *migratingObjSta
 	if isFileExist {
 		switch migration.skip {
 		case Replace:
-			err = migration.zStore.Replace(ctx, remotePath, obj.Body, 0)
+			err = migration.zStore.Replace(ctx, remotePath, obj.Body, 0, obj.ContentType)
 		case Duplicate:
-			err = migration.zStore.Duplicate(ctx, remotePath, obj.Body, 0)
+			err = migration.zStore.Duplicate(ctx, remotePath, obj.Body, 0, obj.ContentType)
 		}
 	} else {
-		err = migration.zStore.Upload(ctx, remotePath, obj.Body, 0)
+		err = migration.zStore.Upload(ctx, remotePath, obj.Body, 0, obj.ContentType, false)
 	}
 
 	if err != nil {
