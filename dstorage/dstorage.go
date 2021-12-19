@@ -2,15 +2,14 @@ package dStorage
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"github.com/0chain/gosdk/zboxcore/fileref"
-	"github.com/0chain/gosdk/zboxcore/zboxutil"
-	"github.com/0chain/s3migration/util"
-	"github.com/mitchellh/go-homedir"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/0chain/gosdk/zboxcore/fileref"
+	"github.com/0chain/s3migration/util"
 
 	"github.com/0chain/gosdk/core/common"
 	"github.com/0chain/gosdk/zboxcore/sdk"
@@ -51,6 +50,7 @@ type DStorageService struct {
 	duplicateSuffix string
 	availableSpace  int64
 	totalSpace      int64
+	workDir         string
 }
 
 const (
@@ -94,29 +94,16 @@ func (d *DStorageService) Upload(ctx context.Context, remotePath string, r io.Re
 		WhoPaysForReads: d.whoPays,
 	}
 
-	remotePath = zboxutil.RemoteClean(remotePath)
-	isAbs := zboxutil.IsRemoteAbs(remotePath)
-	if !isAbs {
-		err := errors.New("invalid_path Path should be valid and absolute")
-		return err
-	}
-
-	_, fileName := filepath.Split(remotePath)
 	fileMeta := sdk.FileMeta{
-		RemotePath: remotePath,
+		RemotePath: filepath.Clean(remotePath),
 		ActualSize: size,
 		MimeType:   contentType,
-		RemoteName: fileName,
+		RemoteName: filepath.Base(remotePath),
 		Attributes: attrs,
 	}
 
-	workDir, err := homedir.Dir()
-	if err != nil {
-		return err
-	}
-
 	chunkSize := getChunkSize(size)
-	chunkUpload, err := sdk.CreateChunkedUpload(workDir, d.allocation, fileMeta, util.NewStreamReader(r), isUpdate, false,
+	chunkUpload, err := sdk.CreateChunkedUpload(d.workDir, d.allocation, fileMeta, util.NewStreamReader(r), isUpdate, false,
 		sdk.WithStatusCallback(cb),
 		sdk.WithChunkSize(chunkSize),
 		sdk.WithEncrypt(d.encrypt),
@@ -168,7 +155,7 @@ func (d *DStorageService) GetTotalSpace() int64 {
 	return d.totalSpace
 }
 
-func GetDStorageService(allocationID, migrateTo, duplicateSuffix string, encrypt bool, whoPays int) (*DStorageService, error) {
+func GetDStorageService(allocationID, migrateTo, duplicateSuffix, workDir string, encrypt bool, whoPays int) (*DStorageService, error) {
 	allocation, err := sdk.GetAllocation(allocationID)
 
 	if err != nil {
@@ -180,6 +167,11 @@ func GetDStorageService(allocationID, migrateTo, duplicateSuffix string, encrypt
 		availableSpace -= (*allocation.Stats).UsedSize
 	}
 
+	workDir = filepath.Join(workDir, "zstore")
+	if err := os.MkdirAll(workDir, 0644); err != nil {
+		return nil, err
+	}
+
 	return &DStorageService{
 		allocation:     allocation,
 		encrypt:        encrypt,
@@ -187,5 +179,6 @@ func GetDStorageService(allocationID, migrateTo, duplicateSuffix string, encrypt
 		migrateTo:      migrateTo,
 		totalSpace:     allocation.Size,
 		availableSpace: availableSpace,
+		workDir:        workDir,
 	}, nil
 }

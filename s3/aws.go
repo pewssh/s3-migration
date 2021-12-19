@@ -3,16 +3,19 @@ package s3
 import (
 	"context"
 	"fmt"
+	"io"
+	"log"
+	"os"
+	"path/filepath"
+	"time"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	awsS3 "github.com/aws/aws-sdk-go-v2/service/s3"
-	"io"
-	"log"
-	"time"
 )
 
 type AwsI interface {
-	ListFilesInBucket(ctx context.Context) (objectMetaChan chan ObjectMeta, errChan chan error)
+	ListFilesInBucket(ctx context.Context) (objectMetaChan chan *ObjectMeta, errChan chan error)
 	GetFileContent(ctx context.Context, objectKey string) (*Object, error)
 	DeleteFile(ctx context.Context, objectKey string) error
 }
@@ -34,13 +37,14 @@ type AwsClient struct {
 	prefix       string
 	region       string
 	startAfter   string
+	workDir      string
 	deleteSource bool
 	newerThan    *time.Time
 	olderThan    *time.Time
 	client       *awsS3.Client
 }
 
-func GetAwsClient(bucket, prefix, region string, deleteSource bool, newerThan, olderThan *time.Time, startAfter string) (*AwsClient, error) {
+func GetAwsClient(bucket, prefix, region string, deleteSource bool, newerThan, olderThan *time.Time, startAfter, workDir string) (*AwsClient, error) {
 	//Get a client; if error return error else return aws client
 	//buckets comes as slice of array([bucketname, prefix]). Find location and put all of them
 	//in buckets field. If bucket is nil; then list all buckets from s3 and update the buckets field
@@ -59,6 +63,11 @@ func GetAwsClient(bucket, prefix, region string, deleteSource bool, newerThan, o
 	if region == "" {
 		region = "us-east-1"
 	}
+	workDir = filepath.Join(workDir, "s3")
+	if err := os.MkdirAll(workDir, 0644); err != nil {
+		return nil, err
+	}
+
 	awsClient := &AwsClient{
 		bucket:       bucket,
 		prefix:       prefix,
@@ -67,6 +76,7 @@ func GetAwsClient(bucket, prefix, region string, deleteSource bool, newerThan, o
 		deleteSource: deleteSource,
 		newerThan:    newerThan,
 		olderThan:    olderThan,
+		workDir:      workDir,
 	}
 
 	var err error
@@ -113,10 +123,10 @@ func (a *AwsClient) getBucketRegion() (string, error) {
 	return string(locationInfo.LocationConstraint), nil
 }
 
-func (a *AwsClient) ListFilesInBucket(ctx context.Context) (objectMetaChan chan ObjectMeta, errChan chan error) {
+func (a *AwsClient) ListFilesInBucket(ctx context.Context) (objectMetaChan chan *ObjectMeta, errChan chan error) {
 	log.Println("contents of bucket : ", a.bucket)
 
-	objectMetaChan = make(chan ObjectMeta, 10000)
+	objectMetaChan = make(chan *ObjectMeta, 10000)
 	errChan = make(chan error)
 
 	go func() {
@@ -163,7 +173,7 @@ func (a *AwsClient) ListFilesInBucket(ctx context.Context) (objectMetaChan chan 
 					continue
 				}
 
-				objectMetaChan <- ObjectMeta{Key: aws.ToString(obj.Key), Size: obj.Size}
+				objectMetaChan <- &ObjectMeta{Key: aws.ToString(obj.Key), Size: obj.Size}
 			}
 		}
 	}()
