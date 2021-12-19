@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -35,6 +36,7 @@ var (
 	awsCredPath                string
 	retryCount                 int
 	deleteSource               bool
+	workDir                    string
 )
 
 // migrateCmd is the migrateFromS3 sub command to migrate whole objects from some buckets.
@@ -56,7 +58,7 @@ func init() {
 	migrateCmd.Flags().StringVar(&duplicateSuffix, "dup-suffix", "_copy", "Duplicate suffix to use for migrated file")
 	migrateCmd.Flags().BoolVar(&deleteSource, "delete-source", false, "Delete object in s3 that is migrated to dStorage")
 	migrateCmd.Flags().StringVar(&awsCredPath, "aws-cred-path", "", "File Path to aws credentials")
-
+	migrateCmd.Flags().StringVar(&workDir, "wd", filepath.Join(util.GetHomeDir(), ".s3migration"), "Working directory")
 	migrateCmd.Flags().IntVar(&concurrency, "concurrency", 10, "number of concurrent files to process concurrently during migration")
 	migrateCmd.Flags().BoolVar(&resume, "resume", false, "pass this option to resume migration from previous state")
 	migrateCmd.Flags().IntVar(&skip, "skip", 1, "0 --> Replace existing files; 1 --> Skip migration; 2 --> Duplicate")
@@ -145,6 +147,14 @@ var migrateCmd = &cobra.Command{
 			olderThanPtr = &olderThan
 		}
 
+		if workDir == "" {
+			workDir = filepath.Join(util.GetHomeDir(), ".s3migration")
+		}
+
+		if err := os.MkdirAll(workDir, 0644); err != nil {
+			return err
+		}
+
 		var startAfter string
 		stateFilePath := migration.StateFilePath(util.GetHomeDir(), bucket)
 		if resume {
@@ -189,6 +199,7 @@ var migrateCmd = &cobra.Command{
 			DeleteSource:    deleteSource,
 			StartAfter:      startAfter,
 			StateFilePath:   stateFilePath,
+			WorkDir:         workDir,
 		}
 
 		if err := migration.InitMigration(&mConfig); err != nil {

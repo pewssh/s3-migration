@@ -19,4 +19,5 @@ type MigrationConfig struct {
 	DeleteSource    bool
 	StartAfter      string
 	StateFilePath   string
+	WorkDir         string
 }

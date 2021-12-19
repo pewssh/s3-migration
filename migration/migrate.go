@@ -52,12 +52,20 @@ type Migration struct {
 
 	stateFilePath string
 	migrateTo     string
+	workDir       string
 	deleteSource  bool
 }
 
 func InitMigration(mConfig *MigrationConfig) error {
 	_ = zlogger.Logger
-	dStorageService, err := dStorage.GetDStorageService(mConfig.AllocationID, mConfig.MigrateToPath, mConfig.DuplicateSuffix, mConfig.Encrypt, mConfig.WhoPays)
+	dStorageService, err := dStorage.GetDStorageService(
+		mConfig.AllocationID,
+		mConfig.MigrateToPath,
+		mConfig.DuplicateSuffix,
+		migration.workDir,
+		mConfig.Encrypt,
+		mConfig.WhoPays,
+	)
 	if err != nil {
 		return err
 	}
@@ -70,6 +78,7 @@ func InitMigration(mConfig *MigrationConfig) error {
 		mConfig.NewerThan,
 		mConfig.OlderThan,
 		mConfig.StartAfter,
+		migration.workDir,
 	)
 	if err != nil {
 		return err
@@ -84,6 +93,7 @@ func InitMigration(mConfig *MigrationConfig) error {
 		stateFilePath: mConfig.StateFilePath,
 		migrateTo:     mConfig.MigrateToPath,
 		deleteSource:  mConfig.DeleteSource,
+		workDir:       mConfig.WorkDir,
 	}
 
 	rootContext, rootContextCancel = context.WithCancel(context.Background())
@@ -133,7 +143,7 @@ func Migrate() error {
 	//TODO obj is not string but struct as it requires both object name and size
 	for obj := range objCh {
 		status := migrationStatuses[count]
-		status.objectKey = obj
+		status.objectKey = obj.Key
 		status.successCh = make(chan struct{}, 1)
 		status.errCh = make(chan error, 1)
 		wg.Add(1)
@@ -257,10 +267,10 @@ func updateStateKeyFunc(statePath string) (func(stateKey string), func(), error)
 	return stateKeyUpdater, fileCloser, nil
 }
 
-func migrateObject(wg *sync.WaitGroup, objectKey string, status *migratingObjStatus, ctx context.Context) {
+func migrateObject(wg *sync.WaitGroup, objMeta *s3.ObjectMeta, status *migratingObjStatus, ctx context.Context) {
 	defer wg.Done()
 
-	remotePath := filepath.Join(migration.migrateTo, objectKey)
+	remotePath := filepath.Join(migration.migrateTo, objMeta.Key)
 
 	dMeta, err := migration.zStore.GetFileMetaData(ctx, remotePath)
 	var isFileExist bool
@@ -277,12 +287,12 @@ func migrateObject(wg *sync.WaitGroup, objectKey string, status *migratingObjSta
 	}
 
 	if isFileExist && migration.skip == Skip {
-		zlogger.Logger.Info("Skipping migration of object" + objectKey)
+		zlogger.Logger.Info("Skipping migration of object" + objMeta.Key)
 		status.successCh <- struct{}{}
 		return
 	}
 
-	obj, err := migration.awsStore.GetFileContent(ctx, objectKey)
+	obj, err := migration.awsStore.GetFileContent(ctx, objMeta.Key)
 	if err != nil {
 		status.errCh <- err
 		return
@@ -292,12 +302,12 @@ func migrateObject(wg *sync.WaitGroup, objectKey string, status *migratingObjSta
 	if isFileExist {
 		switch migration.skip {
 		case Replace:
-			err = migration.zStore.Replace(ctx, remotePath, obj.Body, 0)
+			err = migration.zStore.Replace(ctx, remotePath, obj.Body, objMeta.Size, obj.ContentType)
 		case Duplicate:
-			err = migration.zStore.Duplicate(ctx, remotePath, obj.Body, 0)
+			err = migration.zStore.Duplicate(ctx, remotePath, obj.Body, objMeta.Size, obj.ContentType)
 		}
 	} else {
-		err = migration.zStore.Upload(ctx, remotePath, obj.Body, 0)
+		err = migration.zStore.Upload(ctx, remotePath, obj.Body, objMeta.Size, obj.ContentType, false)
 	}
 
 	if err != nil {
@@ -309,7 +319,7 @@ func migrateObject(wg *sync.WaitGroup, objectKey string, status *migratingObjSta
 		migration.totalMigratedObjects++
 		migration.szCtMu.Unlock()
 		if migration.deleteSource {
-			migration.awsStore.DeleteFile(ctx, objectKey)
+			migration.awsStore.DeleteFile(ctx, objMeta.Key)
 		}
 	}
 
