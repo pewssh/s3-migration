@@ -126,7 +126,7 @@ func (a *AwsClient) getBucketRegion() (string, error) {
 func (a *AwsClient) ListFilesInBucket(ctx context.Context) (objectMetaChan chan *ObjectMeta, errChan chan error) {
 	log.Println("contents of bucket : ", a.bucket)
 
-	objectMetaChan = make(chan *ObjectMeta, 10000)
+	objectMetaChan = make(chan *ObjectMeta, 1000)
 	errChan = make(chan error)
 
 	go func() {
