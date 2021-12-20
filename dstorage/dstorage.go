@@ -7,11 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
-	"github.com/0chain/gosdk/zboxcore/fileref"
 	"github.com/0chain/s3migration/util"
+	zerror "github.com/0chain/s3migration/zErrors"
 
 	"github.com/0chain/gosdk/core/common"
+	"github.com/0chain/gosdk/zboxcore/fileref"
 	"github.com/0chain/gosdk/zboxcore/sdk"
 )
 
@@ -29,11 +31,11 @@ import (
 //So lets put commit request in a queue(use channel) and try three times. If it fails to commit then save state of all bucket and abort the program.
 
 type DStoreI interface {
-	GetFileMetaData(ctx context.Context, remotepath string) (*sdk.ORef, error)
+	GetFileMetaData(ctx context.Context, remotePath string) (*sdk.ORef, error)
 	Replace(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string) error
 	Duplicate(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string) error
 	Upload(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string, isUpdate bool) error
-	IsFileExist(ctx context.Context, remotePath string) bool
+	IsFileExist(ctx context.Context, remotePath string) (bool, error)
 	GetAvailableSpace() int64
 	GetTotalSpace() int64
 }
@@ -59,12 +61,34 @@ const (
 	OneMB            = 1024 * 1024
 	TenMB            = 10 * OneMB
 	HundredMB        = 10 * TenMB
+
+	GetRefRetryWaitTime = 500 * time.Millisecond
+	GetRefRetryCount    = 2
 )
 
-func (d *DStorageService) GetFileMetaData(ctx context.Context, remotepath string) (*sdk.ORef, error) {
+func (d *DStorageService) GetFileMetaData(ctx context.Context, remotePath string) (*sdk.ORef, error) {
 	//if error is nil and ref too is nil then it means remoepath does not exist.
 	//in this case return error with code from error.go
-	return nil, nil
+	level := len(strings.Split(strings.TrimSuffix(remotePath, "/"), "/"))
+	var oResult *sdk.ObjectTreeResult
+	var err error
+	for retryCount := 1; retryCount <= GetRefRetryCount; retryCount++ {
+		oResult, err = d.allocation.GetRefs(remotePath, "", "", "", "", "regular", level, 1)
+		if err == nil {
+			break
+		}
+		if zerror.IsConsensusFailedError(err) {
+			time.Sleep(GetRefRetryWaitTime)
+		} else {
+			return nil, err
+		}
+	}
+
+	if len(oResult.Refs) == 0 {
+		return nil, zerror.ErrFileNoExist
+	}
+
+	return &oResult.Refs[0], nil
 }
 
 func getChunkSize(size int64) int64 {
@@ -84,10 +108,10 @@ func getChunkSize(size int64) int64 {
 	return chunkSize
 }
 
-func (d *DStorageService) Upload(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string, isUpdate bool) error {
-	cb := &StatusCB{
-		DoneCh: make(chan struct{}, 1),
-		ErrCh:  make(chan error, 1),
+func (d *DStorageService) Upload(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string, isUpdate bool) (err error) {
+	cb := &statusCB{
+		doneCh: make(chan struct{}),
+		errCh:  make(chan error),
 	}
 
 	attrs := fileref.Attributes{
@@ -110,15 +134,20 @@ func (d *DStorageService) Upload(ctx context.Context, remotePath string, r io.Re
 	)
 
 	if err != nil {
-		return err
+		return
 	}
 
 	err = chunkUpload.Start()
 	if err != nil {
-		return err
+		return
 	}
 
-	return nil
+	select {
+	case <-cb.doneCh:
+	case err = <-cb.errCh:
+	}
+
+	return
 }
 
 func (d *DStorageService) Replace(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string) error {
@@ -127,10 +156,8 @@ func (d *DStorageService) Replace(ctx context.Context, remotePath string, r io.R
 
 func (d *DStorageService) Duplicate(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string) error {
 	li := strings.LastIndex(remotePath, ".")
-	if li == -1 {
+	if li == -1 || li == 0 {
 		remotePath = fmt.Sprintf("%s%s", remotePath, d.duplicateSuffix)
-	} else if li == 0 {
-		remotePath = fmt.Sprintf("%s%s", d.duplicateSuffix, remotePath)
 	} else {
 		remotePath = fmt.Sprintf("%s%s.%s", remotePath[:li], d.duplicateSuffix, remotePath[li+1:])
 	}
@@ -138,12 +165,15 @@ func (d *DStorageService) Duplicate(ctx context.Context, remotePath string, r io
 	return d.Upload(ctx, remotePath, r, size, contentType, false)
 }
 
-func (d *DStorageService) IsFileExist(ctx context.Context, remotePath string) bool {
-	fileMeta, _ := d.allocation.GetFileMeta(remotePath)
-	if fileMeta != nil {
-		return true
+func (d *DStorageService) IsFileExist(ctx context.Context, remotePath string) (bool, error) {
+	_, err := d.GetFileMetaData(ctx, remotePath)
+	if err != nil {
+		if zerror.IsFileNotExistError(err) {
+			return false, nil
+		}
+		return false, err
 	}
-	return false
+	return true, nil
 }
 
 func (d *DStorageService) GetAvailableSpace() int64 {

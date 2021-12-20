@@ -1,32 +1,34 @@
 package dStorage
 
-import "github.com/0chain/gosdk/core/transaction"
+import (
+	"github.com/0chain/gosdk/core/transaction"
+)
 
-type StatusCB struct {
-	DoneCh chan struct{}
-	ErrCh  chan error
+type statusCB struct {
+	doneCh chan struct{}
+	errCh  chan error
 }
 
-func (cb *StatusCB) Started(allocationId, filePath string, op int, totalBytes int) {
-
-}
-
-func (cb *StatusCB) InProgress(allocationId, filePath string, op int, completedBytes int, data []byte) {
-
-}
-
-func (cb *StatusCB) Error(allocationID string, filePath string, op int, err error) {
+func (cb *statusCB) Started(allocationID, filePath string, op int, totalBytes int) {
 
 }
 
-func (cb *StatusCB) Completed(allocationId, filePath string, filename string, mimetype string, size int, op int) {
+func (cb *statusCB) InProgress(allocationID, filePath string, op int, completedBytes int, data []byte) {
 
 }
 
-func (cb *StatusCB) CommitMetaCompleted(request, response string, txn *transaction.Transaction, err error) {
-
+func (cb *statusCB) Error(allocationID string, filePath string, op int, err error) {
+	cb.errCh <- err
 }
 
-func (cb *StatusCB) RepairCompleted(filesRepaired int) {
+func (cb *statusCB) Completed(allocationID, filePath string, filename string, mimetype string, size int, op int) {
+	cb.doneCh <- struct{}{}
+}
+
+func (cb *statusCB) CommitMetaCompleted(request, response string, txn *transaction.Transaction, err error) {
+	cb.doneCh <- struct{}{}
+}
+
+func (cb *statusCB) RepairCompleted(filesRepaired int) {
 
 }
