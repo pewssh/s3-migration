@@ -26,8 +26,8 @@ var isMigrationInitialized bool
 var rootContext context.Context
 var rootContextCancel context.CancelFunc
 
-var StateFilePath = func(homeDir, bucketName string) string {
-	return fmt.Sprintf("%v/.aws/%v.state", homeDir, bucketName)
+var StateFilePath = func(workDir, bucketName string) string {
+	return fmt.Sprintf("%v/%v.state", workDir, bucketName)
 }
 
 func abandonAllOperations() {
@@ -55,7 +55,8 @@ type Migration struct {
 }
 
 func InitMigration(mConfig *MigrationConfig) error {
-	_ = zlogger.Logger
+	zlogger.Logger.Info("Initializing migration")
+	zlogger.Logger.Info("Getting dStorage service")
 	dStorageService, err := dStorage.GetDStorageService(
 		mConfig.AllocationID,
 		mConfig.MigrateToPath,
@@ -65,9 +66,11 @@ func InitMigration(mConfig *MigrationConfig) error {
 		mConfig.WhoPays,
 	)
 	if err != nil {
+		zlogger.Logger.Error(err)
 		return err
 	}
 
+	zlogger.Logger.Info("Getting aws storage service")
 	awsStorageService, err := s3.GetAwsClient(
 		mConfig.Bucket,
 		mConfig.Prefix,
@@ -79,6 +82,7 @@ func InitMigration(mConfig *MigrationConfig) error {
 		migration.workDir,
 	)
 	if err != nil {
+		zlogger.Logger.Error(err)
 		return err
 	}
 
@@ -135,6 +139,7 @@ func Migrate() error {
 	makeMigrationStatuses()
 
 	for obj := range objCh {
+		zlogger.Logger.Info("Migrating ", obj.Key)
 		status := migrationStatuses[count]
 		status.objectKey = obj.Key
 		status.successCh = make(chan struct{}, 1)
