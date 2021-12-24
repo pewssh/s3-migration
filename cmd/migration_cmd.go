@@ -156,7 +156,7 @@ var migrateCmd = &cobra.Command{
 		}
 
 		var startAfter string
-		stateFilePath := migration.StateFilePath(util.GetHomeDir(), bucket)
+		stateFilePath := migration.StateFilePath(workDir, bucket)
 		if resume {
 			f, err := os.Open(stateFilePath)
 			if err != nil && errors.Is(err, os.ErrNotExist) {
