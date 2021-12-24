@@ -10,7 +10,7 @@ var defaultLogLevel = logger.DEBUG
 var Logger logger.Logger
 
 func init() {
-	Logger.Init(defaultLogLevel, "0fs")
+	Logger.Init(defaultLogLevel, "s3-migration")
 }
 
 func SetLogFile(logFile string, verbose bool) {
