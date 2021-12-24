@@ -110,8 +110,8 @@ func getChunkSize(size int64) int64 {
 
 func (d *DStorageService) Upload(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string, isUpdate bool) (err error) {
 	cb := &statusCB{
-		doneCh: make(chan struct{}),
-		errCh:  make(chan error),
+		doneCh: make(chan struct{}, 1),
+		errCh:  make(chan error, 1),
 	}
 
 	attrs := fileref.Attributes{
@@ -198,7 +198,7 @@ func GetDStorageService(allocationID, migrateTo, duplicateSuffix, workDir string
 	}
 
 	workDir = filepath.Join(workDir, "zstore")
-	if err := os.MkdirAll(workDir, 0644); err != nil {
+	if err := os.MkdirAll(workDir, 0755); err != nil {
 		return nil, err
 	}
 

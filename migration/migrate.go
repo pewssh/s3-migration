@@ -120,25 +120,20 @@ func Migrate() error {
 	}
 
 	objCh, errCh := migration.awsStore.ListFilesInBucket(rootContext)
-	// if err != nil {
-	// 	return err
-	// }
 
 	count := 0
 	batchCount := 0
 	wg := sync.WaitGroup{}
 
 	migrationStatuses := make([]*migratingObjStatus, 10)
-	// makeMigrationStatuses := func() {
-	// 	for _, ms := range migrationStatuses {
-	// 		ms.successCh = make(chan struct{}, 1)
-	// 		ms.errCh = make(chan error, 1)
-	// 	}
-	// }
+	makeMigrationStatuses := func() {
+		for i := 0; i < 10; i++ {
+			migrationStatuses[i] = new(migratingObjStatus)
+		}
+	}
 
-	// makeMigrationStatuses()
+	makeMigrationStatuses()
 
-	//TODO obj is not string but struct as it requires both object name and size
 	for obj := range objCh {
 		status := migrationStatuses[count]
 		status.objectKey = obj.Key
@@ -160,6 +155,8 @@ func Migrate() error {
 			if unresolvedError {
 				//break migration
 				abandonAllOperations()
+				count = 0
+				break
 			}
 
 			//log statekey
@@ -186,9 +183,13 @@ func Migrate() error {
 
 	select {
 	case err := <-errCh:
-		zlogger.Logger.Error("Could not fetch all objects. Error: ", err)
-	default:
-		zlogger.Logger.Info("Got object from s3 without error")
+		if err != nil {
+			zlogger.Logger.Error("Could not fetch all objects. Error: ", err)
+		} else {
+			zlogger.Logger.Info("Got object from s3 without error")
+		}
+	case <-rootContext.Done():
+		zlogger.Logger.Error("Could not fetch all objects. Error: context cancelled")
 	}
 
 	closeStateFile()
@@ -211,6 +212,7 @@ func checkStatuses(statuses []*migratingObjStatus) (stateKey string, unresolvedE
 			}
 		}
 	}
+
 	return
 }
 
@@ -284,6 +286,7 @@ func migrateObject(wg *sync.WaitGroup, objMeta *s3.ObjectMeta, status *migrating
 
 	obj, err := migration.awsStore.GetFileContent(ctx, objMeta.Key)
 	if err != nil {
+		zlogger.Logger.Error(err)
 		status.errCh <- err
 		return
 	}
@@ -300,6 +303,7 @@ func migrateObject(wg *sync.WaitGroup, objMeta *s3.ObjectMeta, status *migrating
 	}
 
 	if err != nil {
+		zlogger.Logger.Error(err)
 		status.errCh <- err
 	} else {
 		status.successCh <- struct{}{}
