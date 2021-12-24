@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	zlogger "github.com/0chain/s3migration/logger"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	awsS3 "github.com/aws/aws-sdk-go-v2/service/s3"
@@ -96,6 +97,16 @@ func GetAwsClient(bucket, prefix, region string, deleteSource bool, newerThan, o
 		}
 	}
 
+	zlogger.Logger.Info(fmt.Sprintf(
+		"Aws client initialized with"+
+			"bucket: %v,"+
+			"prefix: %v,"+
+			"region: %v,"+
+			"startAfter: %v,"+
+			"deleteSource: %v,"+
+			"newerThan: %v,"+
+			"olderThan: %v,"+
+			"workDir: %v", bucket, prefix, region, startAfter, deleteSource, newerThan, olderThan, workDir))
 	return awsClient, nil
 }
 

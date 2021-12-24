@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	zlogger "github.com/0chain/s3migration/logger"
 	"github.com/0chain/s3migration/util"
 	zerror "github.com/0chain/s3migration/zErrors"
 
@@ -202,13 +203,21 @@ func GetDStorageService(allocationID, migrateTo, duplicateSuffix, workDir string
 		return nil, err
 	}
 
+	zlogger.Logger.Info(fmt.Sprintf("Dstorage service initialized with "+
+		"allocation: %v,"+
+		"encrypt: %v,"+
+		"migrateTo: %v,"+
+		"duplicateSuffix: %v"+
+		"workDir: %v", allocationID, encrypt, migrateTo, duplicateSuffix, workDir))
+
 	return &DStorageService{
-		allocation:     allocation,
-		encrypt:        encrypt,
-		whoPays:        common.WhoPays(whoPays),
-		migrateTo:      migrateTo,
-		totalSpace:     allocation.Size,
-		availableSpace: availableSpace,
-		workDir:        workDir,
+		allocation:      allocation,
+		encrypt:         encrypt,
+		whoPays:         common.WhoPays(whoPays),
+		migrateTo:       migrateTo,
+		totalSpace:      allocation.Size,
+		availableSpace:  availableSpace,
+		duplicateSuffix: duplicateSuffix,
+		workDir:         workDir,
 	}, nil
 }
