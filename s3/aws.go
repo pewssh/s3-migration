@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -112,22 +111,24 @@ func getAwsSDKClient(region string) (*awsS3.Client, error) {
 	return client, nil
 }
 
-func (a *AwsClient) getBucketRegion() (string, error) {
+func (a *AwsClient) getBucketRegion() (region string, err error) {
 	locationInfo, err := a.client.GetBucketLocation(context.Background(), &awsS3.GetBucketLocationInput{
 		Bucket: &a.bucket,
 	})
 	if err != nil {
-		return "", err
+		return
 	}
 
-	return string(locationInfo.LocationConstraint), nil
+	region = string(locationInfo.LocationConstraint)
+	if region == "" {
+		region = "us-east-1"
+	}
+	return
 }
 
 func (a *AwsClient) ListFilesInBucket(ctx context.Context) (<-chan *ObjectMeta, <-chan error) {
-	log.Println("contents of bucket : ", a.bucket)
-
 	objectMetaChan := make(chan *ObjectMeta, 1000)
-	errChan := make(chan error)
+	errChan := make(chan error, 1)
 
 	go func() {
 		defer func() {
