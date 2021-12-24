@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"time"
@@ -138,4 +139,30 @@ func Retry(attempts int, sleep time.Duration, f func() error) (err error) {
 		}
 	}
 	return fmt.Errorf("after %d attempts, last error: %s", attempts, err)
+}
+
+// signalTrap traps the registered signals and notifies the caller.
+func SignalTrap(sig ...os.Signal) <-chan struct{} {
+	// channel to notify the caller.
+	trapCh := make(chan struct{}, 1)
+
+	go func(chan<- struct{}) {
+		// channel to receive signals.
+		sigCh := make(chan os.Signal, 1)
+		defer close(sigCh)
+
+		// `signal.Notify` registers the given channel to
+		// receive notifications of the specified signals.
+		signal.Notify(sigCh, sig...)
+
+		// Wait for the signal.
+		<-sigCh
+		// Once signal has been received stop signal Notify handler.
+		signal.Stop(sigCh)
+
+		// Notify the caller.
+		trapCh <- struct{}{}
+	}(trapCh)
+
+	return trapCh
 }
