@@ -2,14 +2,17 @@ package migration
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 
 	dStorage "github.com/0chain/s3migration/dstorage"
 	zlogger "github.com/0chain/s3migration/logger"
 	"github.com/0chain/s3migration/s3"
+	"github.com/0chain/s3migration/util"
 )
 
 const Batch = 10
@@ -30,7 +33,10 @@ var StateFilePath = func(workDir, bucketName string) string {
 	return fmt.Sprintf("%v/%v.state", workDir, bucketName)
 }
 
-func abandonAllOperations() {
+func abandonAllOperations(err error) {
+	if err != nil {
+		zlogger.Logger.Error(err)
+	}
 	rootContextCancel()
 }
 
@@ -61,7 +67,7 @@ func InitMigration(mConfig *MigrationConfig) error {
 		mConfig.AllocationID,
 		mConfig.MigrateToPath,
 		mConfig.DuplicateSuffix,
-		migration.workDir,
+		mConfig.WorkDir,
 		mConfig.Encrypt,
 		mConfig.WhoPays,
 	)
@@ -79,7 +85,7 @@ func InitMigration(mConfig *MigrationConfig) error {
 		mConfig.NewerThan,
 		mConfig.OlderThan,
 		mConfig.StartAfter,
-		migration.workDir,
+		mConfig.WorkDir,
 	)
 	if err != nil {
 		zlogger.Logger.Error(err)
@@ -99,6 +105,14 @@ func InitMigration(mConfig *MigrationConfig) error {
 	}
 
 	rootContext, rootContextCancel = context.WithCancel(context.Background())
+
+	trapCh := util.SignalTrap(os.Interrupt, os.Kill, syscall.SIGTERM)
+
+	go func() {
+		sig := <-trapCh
+		zlogger.Logger.Info(fmt.Sprintf("Signal %v received", sig))
+		abandonAllOperations(errors.New("operation cancelled by user"))
+	}()
 
 	isMigrationInitialized = true
 
@@ -122,6 +136,7 @@ func Migrate() error {
 	if err != nil {
 		return fmt.Errorf("could not create state file path. Error: %v", err)
 	}
+	defer closeStateFile()
 
 	objCh, errCh := migration.awsStore.ListFilesInBucket(rootContext)
 
@@ -157,9 +172,9 @@ func Migrate() error {
 
 			stateKey, unresolvedError := checkStatuses(migrationStatuses)
 
-			if unresolvedError {
+			if unresolvedError != nil {
 				//break migration
-				abandonAllOperations()
+				abandonAllOperations(unresolvedError)
 				count = 0
 				break
 			}
@@ -175,7 +190,7 @@ func Migrate() error {
 		batchCount++
 		wg.Wait()
 		stateKey, unresolvedError := checkStatuses(migrationStatuses[:count])
-		if unresolvedError {
+		if unresolvedError != nil {
 			zlogger.Logger.Error("Check for unresolved errors")
 		}
 
@@ -194,24 +209,23 @@ func Migrate() error {
 			zlogger.Logger.Info("Got object from s3 without error")
 		}
 	case <-rootContext.Done():
-		zlogger.Logger.Error("Could not fetch all objects. Error: context cancelled")
+		zlogger.Logger.Error("Error: context cancelled")
 	}
 
-	closeStateFile()
 	return nil
 }
 
-func checkStatuses(statuses []*migratingObjStatus) (stateKey string, unresolvedError bool) {
+func checkStatuses(statuses []*migratingObjStatus) (stateKey string, unresolvedError error) {
 	for _, mgrtStatus := range statuses {
 		select {
 		case <-mgrtStatus.successCh:
 			stateKey = mgrtStatus.objectKey
 
 		case err := <-mgrtStatus.errCh:
-			unresolvedError = true
+			unresolvedError = err
 			if resolveError(mgrtStatus.objectKey, err) {
 				stateKey = mgrtStatus.objectKey
-				unresolvedError = false
+				unresolvedError = nil
 			} else {
 				return
 			}
@@ -301,6 +315,7 @@ func migrateObject(wg *sync.WaitGroup, objMeta *s3.ObjectMeta, status *migrating
 		case Replace:
 			err = migration.zStore.Replace(ctx, remotePath, obj.Body, objMeta.Size, obj.ContentType)
 		case Duplicate:
+			fmt.Println("Duplicating")
 			err = migration.zStore.Duplicate(ctx, remotePath, obj.Body, objMeta.Size, obj.ContentType)
 		}
 	} else {
