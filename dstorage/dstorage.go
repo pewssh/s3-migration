@@ -39,6 +39,7 @@ type DStoreI interface {
 	IsFileExist(ctx context.Context, remotePath string) (bool, error)
 	GetAvailableSpace() int64
 	GetTotalSpace() int64
+	UpdateAllocationDetails() error
 }
 
 type DStorageService struct {
@@ -51,8 +52,6 @@ type DStorageService struct {
 	//Duplicate suffix to use if file already exists in dStorage. So if remotepath if /path/to/remote/file.txt
 	//then duplicate path should be /path/to/remote/file{duplicateSuffix}.txt
 	duplicateSuffix string
-	availableSpace  int64
-	totalSpace      int64
 	workDir         string
 }
 
@@ -177,13 +176,20 @@ func (d *DStorageService) IsFileExist(ctx context.Context, remotePath string) (b
 	return true, nil
 }
 
+func (d *DStorageService) UpdateAllocationDetails() error {
+	return sdk.GetAllocationUpdates(d.allocation)
+}
+
 func (d *DStorageService) GetAvailableSpace() int64 {
-	// allocationdetails := getallocationdetailsfrom0chain()
-	return d.availableSpace
+	var availableSpace = d.allocation.Size
+	if d.allocation.Stats != nil {
+		availableSpace -= (*d.allocation.Stats).UsedSize
+	}
+	return availableSpace
 }
 
 func (d *DStorageService) GetTotalSpace() int64 {
-	return d.totalSpace
+	return d.allocation.Size
 }
 
 func GetDStorageService(allocationID, migrateTo, duplicateSuffix, workDir string, encrypt bool, whoPays int) (*DStorageService, error) {
@@ -191,11 +197,6 @@ func GetDStorageService(allocationID, migrateTo, duplicateSuffix, workDir string
 
 	if err != nil {
 		return nil, err
-	}
-
-	var availableSpace = allocation.Size
-	if allocation.Stats != nil {
-		availableSpace -= (*allocation.Stats).UsedSize
 	}
 
 	workDir = filepath.Join(workDir, "zstore")
@@ -207,7 +208,7 @@ func GetDStorageService(allocationID, migrateTo, duplicateSuffix, workDir string
 		"allocation: %v,"+
 		"encrypt: %v,"+
 		"migrateTo: %v,"+
-		"duplicateSuffix: %v"+
+		"duplicateSuffix: %v, "+
 		"workDir: %v", allocationID, encrypt, migrateTo, duplicateSuffix, workDir))
 
 	return &DStorageService{
@@ -215,8 +216,6 @@ func GetDStorageService(allocationID, migrateTo, duplicateSuffix, workDir string
 		encrypt:         encrypt,
 		whoPays:         common.WhoPays(whoPays),
 		migrateTo:       migrateTo,
-		totalSpace:      allocation.Size,
-		availableSpace:  availableSpace,
 		duplicateSuffix: duplicateSuffix,
 		workDir:         workDir,
 	}, nil

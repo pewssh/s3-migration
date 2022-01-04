@@ -9,13 +9,17 @@ const (
 	FileExistErrCode                   = "file_exist"
 	ConsensusFailedErrCode             = "consensus_failed"
 	TransactionValidationFailedErrCode = "transaction_validation_failed"
+	InsufficientZStorageSpace          = "insufficient_storage_space"
+	OperationCancelledByUser           = "operation_cancelled_by_user"
 )
 
 var (
-	ErrFileNoExist           = zerror.New(FileNoExistErrCode, "")
-	ErrFileExist             = zerror.New(FileExistErrCode, "")
-	ErrConsensusFailed       = zerror.New(ConsensusFailedErrCode, "")
-	ErrTransactionValidation = zerror.New(TransactionValidationFailedErrCode, "")
+	ErrFileNoExist              = zerror.New(FileNoExistErrCode, "")
+	ErrFileExist                = zerror.New(FileExistErrCode, "")
+	ErrConsensusFailed          = zerror.New(ConsensusFailedErrCode, "")
+	ErrTransactionValidation    = zerror.New(TransactionValidationFailedErrCode, "")
+	ErrInsufficientSpace        = zerror.New(InsufficientZStorageSpace, "")
+	ErrOperationCancelledByUser = zerror.New(OperationCancelledByUser, "")
 )
 
 func IsConsensusFailedError(err error) bool {

@@ -2,17 +2,20 @@ package migration
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"syscall"
+	"time"
 
+	"github.com/0chain/errors"
 	dStorage "github.com/0chain/s3migration/dstorage"
 	zlogger "github.com/0chain/s3migration/logger"
 	"github.com/0chain/s3migration/s3"
 	"github.com/0chain/s3migration/util"
+	zerror "github.com/0chain/s3migration/zErrors"
 )
 
 const Batch = 10
@@ -111,7 +114,7 @@ func InitMigration(mConfig *MigrationConfig) error {
 	go func() {
 		sig := <-trapCh
 		zlogger.Logger.Info(fmt.Sprintf("Signal %v received", sig))
-		abandonAllOperations(errors.New("operation cancelled by user"))
+		abandonAllOperations(zerror.ErrOperationCancelledByUser)
 	}()
 
 	isMigrationInitialized = true
@@ -123,6 +126,45 @@ type migratingObjStatus struct {
 	objectKey string
 	successCh chan struct{}
 	errCh     chan error //should be of type zerror
+}
+
+func processMigrationBatch(objList []*s3.ObjectMeta, migrationStatuses []*migratingObjStatus, batchSize int64) (stateKey string, batchProcessSuccess bool) {
+	if err := migration.zStore.UpdateAllocationDetails(); err != nil {
+		zlogger.Logger.Error("Error while updating allocation details; ", err)
+		abandonAllOperations(err)
+		return
+	}
+
+	availableStorage := migration.zStore.GetAvailableSpace()
+
+	if availableStorage < batchSize {
+		zlogger.Logger.Error(fmt.Sprintf("Insufficient Space available space: %v, batchStorageSpace: %v", availableStorage, batchSize))
+		abandonAllOperations(errors.New(zerror.InsufficientZStorageSpace, fmt.Sprintf("Available: %v, Batch Size: %v", availableStorage, batchSize)))
+		return
+	}
+
+	wg := sync.WaitGroup{}
+	for i := 0; i < len(objList); i++ {
+		obj := objList[i]
+		zlogger.Logger.Info("Migrating ", obj.Key)
+		wg.Add(1)
+		status := migrationStatuses[i]
+		status.objectKey = obj.Key
+		status.successCh = make(chan struct{}, 1)
+		status.errCh = make(chan error, 1)
+		go migrateObject(&wg, obj, status, rootContext)
+	}
+	wg.Wait()
+
+	stateKey, unresolvedError := checkStatuses(migrationStatuses[:len(objList)])
+
+	if unresolvedError != nil {
+		//break migration
+		abandonAllOperations(unresolvedError)
+		return
+	}
+	batchProcessSuccess = true
+	return
 }
 
 func Migrate() error {
@@ -140,61 +182,45 @@ func Migrate() error {
 
 	objCh, errCh := migration.awsStore.ListFilesInBucket(rootContext)
 
-	count := 0
-	batchCount := 0
-	wg := sync.WaitGroup{}
+	var count, batchCount int
 
+	objectList := make([]*s3.ObjectMeta, 10)
 	migrationStatuses := make([]*migratingObjStatus, 10)
 	makeMigrationStatuses := func() {
 		for i := 0; i < 10; i++ {
 			migrationStatuses[i] = new(migratingObjStatus)
 		}
 	}
-
 	makeMigrationStatuses()
 
+	var batchSize int64
 	for obj := range objCh {
-		zlogger.Logger.Info("Migrating ", obj.Key)
-		status := migrationStatuses[count]
-		status.objectKey = obj.Key
-		status.successCh = make(chan struct{}, 1)
-		status.errCh = make(chan error, 1)
-		wg.Add(1)
-
-		go migrateObject(&wg, obj, status, rootContext)
-
+		objectList[count] = obj
 		count++
-
+		batchSize += obj.Size
 		if count == 10 {
 			batchCount++
-
-			wg.Wait()
-
-			stateKey, unresolvedError := checkStatuses(migrationStatuses)
-
-			if unresolvedError != nil {
-				//break migration
-				abandonAllOperations(unresolvedError)
+			stateKey, batchProcessSuccess := processMigrationBatch(objectList, migrationStatuses, batchSize)
+			if !batchProcessSuccess {
 				count = 0
 				break
 			}
 
-			//log statekey
-			updateState(stateKey)
 			count = 0
-		}
+			batchSize = 0
 
+			zlogger.Logger.Info("New State Key: ", stateKey)
+			updateState(stateKey)
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
 
 	if count != 0 { //last batch that is not multiple of 10
 		batchCount++
-		wg.Wait()
-		stateKey, unresolvedError := checkStatuses(migrationStatuses[:count])
-		if unresolvedError != nil {
-			zlogger.Logger.Error("Check for unresolved errors")
+		stateKey, batchProcessSuccess := processMigrationBatch(objectList[:count], migrationStatuses, batchSize)
+		if batchProcessSuccess {
+			updateState(stateKey)
 		}
-
-		updateState(stateKey)
 
 	}
 
@@ -313,12 +339,14 @@ func migrateObject(wg *sync.WaitGroup, objMeta *s3.ObjectMeta, status *migrating
 	if isFileExist {
 		switch migration.skip {
 		case Replace:
+			zlogger.Logger.Info("Replacing object" + objMeta.Key + " size " + strconv.FormatInt(objMeta.Size, 10))
 			err = migration.zStore.Replace(ctx, remotePath, obj.Body, objMeta.Size, obj.ContentType)
 		case Duplicate:
-			fmt.Println("Duplicating")
+			zlogger.Logger.Info("Duplicating object" + objMeta.Key + " size " + strconv.FormatInt(objMeta.Size, 10))
 			err = migration.zStore.Duplicate(ctx, remotePath, obj.Body, objMeta.Size, obj.ContentType)
 		}
 	} else {
+		zlogger.Logger.Info("Uploading object" + objMeta.Key + " size " + strconv.FormatInt(objMeta.Size, 10))
 		err = migration.zStore.Upload(ctx, remotePath, obj.Body, objMeta.Size, obj.ContentType, false)
 	}
 
