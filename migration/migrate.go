@@ -194,14 +194,16 @@ func Migrate() error {
 	makeMigrationStatuses()
 
 	var batchSize int64
+	var migrationSuccess bool
+	var stateKey string
 	for obj := range objCh {
 		objectList[count] = obj
 		count++
 		batchSize += obj.Size
 		if count == 10 {
 			batchCount++
-			stateKey, batchProcessSuccess := processMigrationBatch(objectList, migrationStatuses, batchSize)
-			if !batchProcessSuccess {
+			stateKey, migrationSuccess = processMigrationBatch(objectList, migrationStatuses, batchSize)
+			if !migrationSuccess {
 				count = 0
 				break
 			}
@@ -217,8 +219,8 @@ func Migrate() error {
 
 	if count != 0 { //last batch that is not multiple of 10
 		batchCount++
-		stateKey, batchProcessSuccess := processMigrationBatch(objectList[:count], migrationStatuses, batchSize)
-		if batchProcessSuccess {
+		stateKey, migrationSuccess = processMigrationBatch(objectList[:count], migrationStatuses, batchSize)
+		if migrationSuccess {
 			updateState(stateKey)
 		}
 
@@ -228,7 +230,7 @@ func Migrate() error {
 	zlogger.Logger.Info("Total migrated size: ", migration.migratedSize)
 
 	select {
-	case err := <-errCh:
+	case err = <-errCh:
 		if err != nil {
 			zlogger.Logger.Error("Could not fetch all objects. Error: ", err)
 		} else {
@@ -236,9 +238,14 @@ func Migrate() error {
 		}
 	case <-rootContext.Done():
 		zlogger.Logger.Error("Error: context cancelled")
+		err = rootContext.Err()
 	}
 
-	return nil
+	if !migrationSuccess && err == nil {
+		return context.Canceled
+	}
+
+	return err
 }
 
 func checkStatuses(statuses []*migratingObjStatus) (stateKey string, unresolvedError error) {
@@ -269,7 +276,7 @@ func resolveError(objectKey string, err error) (isErrorResolved bool) {
 	return
 }
 
-func updateStateKeyFunc(statePath string) (func(stateKey string), func(), error) {
+var updateStateKeyFunc = func(statePath string) (func(stateKey string), func(), error) {
 	f, err := os.Create(statePath)
 	if err != nil {
 		return nil, nil, err
