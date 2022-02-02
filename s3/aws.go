@@ -6,11 +6,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	zlogger "github.com/0chain/s3migration/logger"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	awsS3 "github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
@@ -19,6 +21,7 @@ type AwsI interface {
 	ListFilesInBucket(ctx context.Context) (<-chan *ObjectMeta, <-chan error)
 	GetFileContent(ctx context.Context, objectKey string) (*Object, error)
 	DeleteFile(ctx context.Context, objectKey string) error
+	DownloadToFile(ctx context.Context, objectKey string) (string, error)
 }
 
 type Object struct {
@@ -43,23 +46,10 @@ type AwsClient struct {
 	newerThan    *time.Time
 	olderThan    *time.Time
 	client       *awsS3.Client
+	downloader   *manager.Downloader
 }
 
 func GetAwsClient(bucket, prefix, region string, deleteSource bool, newerThan, olderThan *time.Time, startAfter, workDir string) (*AwsClient, error) {
-	//Get a client; if error return error else return aws client
-	//buckets comes as slice of array([bucketname, prefix]). Find location and put all of them
-	//in buckets field. If bucket is nil; then list all buckets from s3 and update the buckets field
-	// For example
-	// for _, bkt := range buckets{
-	// 	bucketName := bkt[0]
-	// 	prefix := bkt[1]
-	// 	location := "abc" // get from client
-	// 	awsClient.buckets = append(awsClient.buckets, bucket{
-	// 		Name: bucketName,
-	// 		Prefix: prefix,
-	// 		Location: location,
-	// 	})
-	// }
 
 	if region == "" {
 		region = "us-east-1"
@@ -97,6 +87,11 @@ func GetAwsClient(bucket, prefix, region string, deleteSource bool, newerThan, o
 			return nil, err
 		}
 	}
+
+	awsClient.downloader = manager.NewDownloader(awsClient.client, func(u *manager.Downloader) {
+		u.PartSize = 5 * 1024 * 1024
+		u.Concurrency = 100
+	})
 
 	zlogger.Logger.Info(fmt.Sprintf(
 		"Aws client initialized with"+
@@ -215,4 +210,22 @@ func (a *AwsClient) DeleteFile(ctx context.Context, objectKey string) error {
 		Key:    aws.String(objectKey),
 	})
 	return err
+}
+
+func (a *AwsClient) DownloadToFile(ctx context.Context, objectKey string) (string, error) {
+	params := &awsS3.GetObjectInput{
+		Bucket: aws.String(a.bucket),
+		Key:    aws.String(objectKey),
+	}
+
+	fileName := strings.ReplaceAll(objectKey, "/", "")
+	downloadPath := filepath.Join(a.workDir, fileName)
+	f, err := os.Create(downloadPath)
+	if err != nil {
+		return downloadPath, err
+	}
+
+	defer f.Close()
+	_, err = a.downloader.Download(ctx, f, params)
+	return downloadPath, err
 }

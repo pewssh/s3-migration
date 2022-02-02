@@ -63,6 +63,9 @@ const (
 	TenMB            = 10 * OneMB
 	HundredMB        = 10 * TenMB
 
+	MaxChunkSize = 2 * TenMB
+	MinChunkSize = DefaultChunkSize
+
 	GetRefRetryWaitTime = 500 * time.Millisecond
 	GetRefRetryCount    = 2
 )
@@ -85,7 +88,7 @@ func (d *DStorageService) GetFileMetaData(ctx context.Context, remotePath string
 		}
 	}
 
-	if len(oResult.Refs) == 0 {
+	if oResult == nil || len(oResult.Refs) == 0 {
 		return nil, zerror.ErrFileNoExist
 	}
 

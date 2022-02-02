@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/0chain/errors"
+	"github.com/0chain/gosdk/zboxcore/zboxutil"
 	dStorage "github.com/0chain/s3migration/dstorage"
 	zlogger "github.com/0chain/s3migration/logger"
 	"github.com/0chain/s3migration/s3"
@@ -26,7 +26,6 @@ const (
 )
 
 var migration Migration
-var isMigrationInitialized bool
 
 //Use context for all requests.
 var rootContext context.Context
@@ -46,6 +45,7 @@ func abandonAllOperations(err error) {
 type Migration struct {
 	zStore   dStorage.DStoreI
 	awsStore s3.AwsI
+	fs       util.FileSystem
 
 	skip       int
 	retryCount int
@@ -61,6 +61,7 @@ type Migration struct {
 	migrateTo     string
 	workDir       string
 	deleteSource  bool
+	bucket        string
 }
 
 func InitMigration(mConfig *MigrationConfig) error {
@@ -105,6 +106,8 @@ func InitMigration(mConfig *MigrationConfig) error {
 		migrateTo:     mConfig.MigrateToPath,
 		deleteSource:  mConfig.DeleteSource,
 		workDir:       mConfig.WorkDir,
+		bucket:        mConfig.Bucket,
+		fs:            util.Fs,
 	}
 
 	rootContext, rootContextCancel = context.WithCancel(context.Background())
@@ -117,178 +120,7 @@ func InitMigration(mConfig *MigrationConfig) error {
 		abandonAllOperations(zerror.ErrOperationCancelledByUser)
 	}()
 
-	isMigrationInitialized = true
-
 	return nil
-}
-
-type migratingObjStatus struct {
-	objectKey string
-	successCh chan struct{}
-	errCh     chan error //should be of type zerror
-}
-
-func processMigrationBatch(objList []*s3.ObjectMeta, migrationStatuses []*migratingObjStatus, batchSize int64) (stateKey string, batchProcessSuccess bool) {
-	if err := migration.zStore.UpdateAllocationDetails(); err != nil {
-		zlogger.Logger.Error("Error while updating allocation details; ", err)
-		abandonAllOperations(err)
-		return
-	}
-
-	availableStorage := migration.zStore.GetAvailableSpace()
-
-	if availableStorage < batchSize {
-		zlogger.Logger.Error(fmt.Sprintf("Insufficient Space available space: %v, batchStorageSpace: %v", availableStorage, batchSize))
-		abandonAllOperations(errors.New(zerror.InsufficientZStorageSpace, fmt.Sprintf("Available: %v, Batch Size: %v", availableStorage, batchSize)))
-		return
-	}
-
-	wg := sync.WaitGroup{}
-	for i := 0; i < len(objList); i++ {
-		obj := objList[i]
-		zlogger.Logger.Info("Migrating ", obj.Key)
-		wg.Add(1)
-		status := migrationStatuses[i]
-		status.objectKey = obj.Key
-		status.successCh = make(chan struct{}, 1)
-		status.errCh = make(chan error, 1)
-		go func() {
-			defer wg.Done()
-			err := util.Retry(3, time.Second*5, func() error {
-				err := migrateObject(obj, rootContext)
-				return err
-			})
-			if err != nil {
-				status.errCh <- err
-			} else {
-				status.successCh <- struct{}{}
-				migration.szCtMu.Lock()
-				migration.migratedSize += uint64(obj.Size)
-				migration.totalMigratedObjects++
-				migration.szCtMu.Unlock()
-			}
-		}()
-	}
-	wg.Wait()
-
-	stateKey, unresolvedError := checkStatuses(migrationStatuses[:len(objList)])
-
-	if unresolvedError != nil {
-		//break migration
-		abandonAllOperations(unresolvedError)
-		return
-	}
-	batchProcessSuccess = true
-	return
-}
-
-func Migrate() error {
-	defer rootContextCancel()
-
-	if !isMigrationInitialized {
-		return fmt.Errorf("migration is not initialized")
-	}
-
-	updateState, closeStateFile, err := updateStateKeyFunc(migration.stateFilePath)
-	if err != nil {
-		return fmt.Errorf("could not create state file path. Error: %v", err)
-	}
-	defer closeStateFile()
-
-	objCh, errCh := migration.awsStore.ListFilesInBucket(rootContext)
-
-	var count, batchCount int
-
-	objectList := make([]*s3.ObjectMeta, 10)
-	migrationStatuses := make([]*migratingObjStatus, 10)
-	makeMigrationStatuses := func() {
-		for i := 0; i < 10; i++ {
-			migrationStatuses[i] = new(migratingObjStatus)
-		}
-	}
-	makeMigrationStatuses()
-	batchConcurrency := 10
-	var batchSize int64
-	var migrationSuccess bool
-	var stateKey string
-	for obj := range objCh {
-		objectList[count] = obj
-		count++
-		batchSize += obj.Size
-		if count == batchConcurrency {
-			batchCount++
-			stateKey, migrationSuccess = processMigrationBatch(objectList[:count], migrationStatuses, batchSize)
-			if !migrationSuccess {
-				count = 0
-				break
-			}
-
-			count = 0
-			batchSize = 0
-
-			zlogger.Logger.Info("New State Key: ", stateKey)
-			updateState(stateKey)
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
-
-	if count != 0 { //last batch that is not multiple of 10
-		batchCount++
-		stateKey, migrationSuccess = processMigrationBatch(objectList[:count], migrationStatuses, batchSize)
-		if migrationSuccess {
-			updateState(stateKey)
-		}
-
-	}
-
-	zlogger.Logger.Info("Total migrated objects: ", migration.totalMigratedObjects)
-	zlogger.Logger.Info("Total migrated size: ", migration.migratedSize)
-
-	select {
-	case err = <-errCh:
-		if err != nil {
-			zlogger.Logger.Error("Could not fetch all objects. Error: ", err)
-		} else {
-			zlogger.Logger.Info("Got object from s3 without error")
-		}
-	case <-rootContext.Done():
-		zlogger.Logger.Error("Error: context cancelled")
-		err = rootContext.Err()
-	}
-
-	if !migrationSuccess && err == nil {
-		return context.Canceled
-	}
-
-	return err
-}
-
-func checkStatuses(statuses []*migratingObjStatus) (stateKey string, unresolvedError error) {
-	for _, mgrtStatus := range statuses {
-		select {
-		case <-mgrtStatus.successCh:
-			stateKey = mgrtStatus.objectKey
-
-		case err := <-mgrtStatus.errCh:
-			unresolvedError = err
-			if resolveError(mgrtStatus.objectKey, err) {
-				stateKey = mgrtStatus.objectKey
-				unresolvedError = nil
-			} else {
-				return
-			}
-		}
-	}
-
-	return
-}
-
-func resolveError(objectKey string, err error) (isErrorResolved bool) {
-	switch err.(type) {
-
-	}
-
-	return
 }
 
 var updateStateKeyFunc = func(statePath string) (func(stateKey string), func(), error) {
@@ -332,39 +164,175 @@ var updateStateKeyFunc = func(statePath string) (func(stateKey string), func(), 
 	return stateKeyUpdater, fileCloser, nil
 }
 
-func migrateObject(objMeta *s3.ObjectMeta, ctx context.Context) error {
-	remotePath := filepath.Join(migration.migrateTo, objMeta.Key)
+func StartMigration() error {
+	defer func(start time.Time) {
+		zlogger.Logger.Info("time taken: ", time.Since(start))
+	}(time.Now())
 
-	isFileExist, err := migration.zStore.IsFileExist(ctx, remotePath)
+	migrationWorker := NewMigrationWorker()
+	go migration.DownloadWorker(rootContext, migrationWorker)
+	go migration.UploadWorker(rootContext, migrationWorker)
+	migration.UpdateStateFile(migrationWorker)
+	err := migrationWorker.GetMigrationError()
+	if err != nil {
+		zlogger.Logger.Error("Error while migration, err", err)
+	}
+	zlogger.Logger.Info("Total migrated objects: ", migration.totalMigratedObjects)
+	zlogger.Logger.Info("Total migrated size: ", migration.migratedSize)
+	return err
+}
+
+func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorker) {
+	defer migrator.CloseDownloadQueue()
+	objCh, errCh := migration.awsStore.ListFilesInBucket(rootContext)
+	wg := &sync.WaitGroup{}
+	for obj := range objCh {
+		migrator.PauseDownload()
+		if migrator.IsMigrationError() {
+			return
+		}
+		wg.Add(1)
+
+		downloadObjMeta := &DownloadObjectMeta{
+			ObjectKey: obj.Key,
+			Size:      obj.Size,
+			DoneChan:  make(chan struct{}, 1),
+			ErrChan:   make(chan error, 1),
+		}
+
+		go func() {
+			defer wg.Done()
+			err := checkIsFileExist(ctx, downloadObjMeta)
+			if err != nil {
+				migrator.SetMigrationError(err)
+				return
+			}
+			if downloadObjMeta.IsFileAlreadyExist && migration.skip == Skip {
+				zlogger.Logger.Info("Skipping migration of object" + downloadObjMeta.ObjectKey)
+				return
+			}
+			migrator.DownloadStart(downloadObjMeta)
+			zlogger.Logger.Info("download start", downloadObjMeta.ObjectKey, downloadObjMeta.Size)
+			downloadPath, err := m.awsStore.DownloadToFile(ctx, downloadObjMeta.ObjectKey)
+			migrator.DownloadDone(downloadObjMeta, downloadPath, err)
+			migrator.SetMigrationError(err)
+			zlogger.Logger.Info("download done", downloadObjMeta.ObjectKey, downloadObjMeta.Size, err)
+		}()
+		time.Sleep(1 * time.Second)
+	}
+	wg.Wait()
+	err := <-errCh
+	if err != nil {
+		migrator.SetMigrationError(err)
+	}
+
+}
+
+func (m *Migration) UploadWorker(ctx context.Context, migrator *MigrationWorker) {
+	defer migrator.CloseUploadQueue()
+	downloadQueue := migrator.GetDownloadQueue()
+	wg := &sync.WaitGroup{}
+	for d := range downloadQueue {
+		migrator.PauseUpload()
+		downloadObj := d
+		uploadObj := &UploadObjectMeta{
+			ObjectKey: downloadObj.ObjectKey,
+			DoneChan:  make(chan struct{}, 1),
+			ErrChan:   make(chan error, 1),
+			Size:      downloadObj.Size,
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := checkDownloadStatus(downloadObj)
+			if err != nil {
+				migrator.SetMigrationError(err)
+				return
+			}
+			defer func() {
+				_ = m.fs.Remove(downloadObj.LocalPath)
+			}()
+			migrator.UploadStart(uploadObj)
+			zlogger.Logger.Info("upload start", uploadObj.ObjectKey, uploadObj.Size)
+			err = util.Retry(3, time.Second*5, func() error {
+				err := processUpload(ctx, downloadObj)
+				return err
+			})
+			migrator.UploadDone(uploadObj, err)
+			migrator.SetMigrationError(err)
+			zlogger.Logger.Info("upload done", uploadObj.ObjectKey, uploadObj.Size, err)
+		}()
+		time.Sleep(1 * time.Second)
+	}
+	wg.Wait()
+}
+
+func getRemotePath(objectKey string) string {
+	return filepath.Join(migration.migrateTo, migration.bucket, objectKey)
+}
+
+func checkIsFileExist(ctx context.Context, downloadObj *DownloadObjectMeta) error {
+	remotePath := getRemotePath(downloadObj.ObjectKey)
+
+	var isFileExist bool
+	err := util.Retry(3, time.Second*5, func() error {
+		var err error
+		isFileExist, err = migration.zStore.IsFileExist(ctx, remotePath)
+		return err
+	})
 
 	if err != nil {
 		zlogger.Logger.Error(err)
 		return err
 	}
 
-	if isFileExist && migration.skip == Skip {
-		zlogger.Logger.Info("Skipping migration of object" + objMeta.Key)
+	downloadObj.IsFileAlreadyExist = isFileExist
+	return nil
+}
+
+func checkDownloadStatus(downloadObj *DownloadObjectMeta) error {
+	select {
+	case <-downloadObj.DoneChan:
 		return nil
+	case err := <-downloadObj.ErrChan:
+		return err
 	}
+}
 
-	obj, err := migration.awsStore.GetFileContent(ctx, objMeta.Key)
+func processUpload(ctx context.Context, downloadObj *DownloadObjectMeta) error {
+	remotePath := getRemotePath(downloadObj.ObjectKey)
+
+	fileObj, err := migration.fs.Open(downloadObj.LocalPath)
 	if err != nil {
 		zlogger.Logger.Error(err)
 		return err
 	}
 
-	if isFileExist {
+	defer fileObj.Close()
+
+	fileInfo, err := fileObj.Stat()
+	if err != nil {
+		zlogger.Logger.Error(err)
+		return err
+	}
+	mimeType, err := zboxutil.GetFileContentType(fileObj)
+	if err != nil {
+		zlogger.Logger.Error(err)
+		return err
+	}
+
+	if downloadObj.IsFileAlreadyExist {
 		switch migration.skip {
 		case Replace:
-			zlogger.Logger.Info("Replacing object" + objMeta.Key + " size " + strconv.FormatInt(objMeta.Size, 10))
-			err = migration.zStore.Replace(ctx, remotePath, obj.Body, objMeta.Size, obj.ContentType)
+			zlogger.Logger.Info("Replacing object" + downloadObj.ObjectKey + " size " + strconv.FormatInt(downloadObj.Size, 10))
+			err = migration.zStore.Replace(ctx, remotePath, fileObj, fileInfo.Size(), mimeType)
 		case Duplicate:
-			zlogger.Logger.Info("Duplicating object" + objMeta.Key + " size " + strconv.FormatInt(objMeta.Size, 10))
-			err = migration.zStore.Duplicate(ctx, remotePath, obj.Body, objMeta.Size, obj.ContentType)
+			zlogger.Logger.Info("Duplicating object" + downloadObj.ObjectKey + " size " + strconv.FormatInt(downloadObj.Size, 10))
+			err = migration.zStore.Duplicate(ctx, remotePath, fileObj, fileInfo.Size(), mimeType)
 		}
 	} else {
-		zlogger.Logger.Info("Uploading object" + objMeta.Key + " size " + strconv.FormatInt(objMeta.Size, 10))
-		err = migration.zStore.Upload(ctx, remotePath, obj.Body, objMeta.Size, obj.ContentType, false)
+		zlogger.Logger.Info("Uploading object" + downloadObj.ObjectKey + " size " + strconv.FormatInt(downloadObj.Size, 10))
+		err = migration.zStore.Upload(ctx, remotePath, fileObj, fileInfo.Size(), mimeType, false)
 	}
 
 	if err != nil {
@@ -372,8 +340,30 @@ func migrateObject(objMeta *s3.ObjectMeta, ctx context.Context) error {
 		return err
 	} else {
 		if migration.deleteSource {
-			migration.awsStore.DeleteFile(ctx, objMeta.Key)
+			_ = migration.awsStore.DeleteFile(ctx, downloadObj.ObjectKey)
 		}
+		migration.szCtMu.Lock()
+		migration.migratedSize += uint64(downloadObj.Size)
+		migration.totalMigratedObjects++
+		migration.szCtMu.Unlock()
 		return nil
+	}
+}
+
+func (m *Migration) UpdateStateFile(migrateHandler *MigrationWorker) {
+	updateState, closeStateFile, err := updateStateKeyFunc(migration.stateFilePath)
+	if err != nil {
+		migrateHandler.SetMigrationError(err)
+		return
+	}
+	defer closeStateFile()
+	uploadQueue := migrateHandler.GetUploadQueue()
+	for u := range uploadQueue {
+		select {
+		case <-u.DoneChan:
+			updateState(u.ObjectKey)
+		case <-u.ErrChan:
+			return
+		}
 	}
 }
