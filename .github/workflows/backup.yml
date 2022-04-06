@@ -25,7 +25,7 @@ jobs:
       - name: Create backup
         if: steps.get_info.outputs.GIT_COMMIT_DATE == steps.get_info.outputs.YESTERDAY_DATE
         run: |
-          github-backup s3-migration -P -t ${{ secrets.ACCESS_TOKEN }} --output-directory=/github-backup/s3-migration --all -O -R s3-migration
+          github-backup 0chain -P -t ${{ secrets.ACCESS_TOKEN }} --output-directory=/github-backup/s3-migration --all -O -R s3-migration
           
       - name: Create zip
         if: steps.get_info.outputs.GIT_COMMIT_DATE == steps.get_info.outputs.YESTERDAY_DATE
