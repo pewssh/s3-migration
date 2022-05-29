@@ -57,15 +57,6 @@ type DStorageService struct {
 }
 
 const (
-	DefaultChunkSize = 64 * 1024
-	FiveHundredKB    = 500 * 1024
-	OneMB            = 1024 * 1024
-	TenMB            = 10 * OneMB
-	HundredMB        = 10 * TenMB
-
-	MaxChunkSize = 2 * TenMB
-	MinChunkSize = DefaultChunkSize
-
 	GetRefRetryWaitTime = 500 * time.Millisecond
 	GetRefRetryCount    = 2
 )
@@ -95,21 +86,6 @@ func (d *DStorageService) GetFileMetaData(ctx context.Context, remotePath string
 	return &oResult.Refs[0], nil
 }
 
-func getChunkSize(size int64) int64 {
-	var chunkSize int64
-	switch {
-	case size > TenMB:
-		chunkSize = TenMB
-	case size > OneMB:
-		chunkSize = OneMB
-	case size > FiveHundredKB:
-		chunkSize = FiveHundredKB
-	default:
-		chunkSize = DefaultChunkSize
-	}
-	return chunkSize
-}
-
 func (d *DStorageService) Upload(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string, isUpdate bool) (err error) {
 	cb := &statusCB{
 		doneCh: make(chan struct{}, 1),
@@ -128,10 +104,8 @@ func (d *DStorageService) Upload(ctx context.Context, remotePath string, r io.Re
 		Attributes: attrs,
 	}
 
-	chunkSize := getChunkSize(size)
 	chunkUpload, err := sdk.CreateChunkedUpload(d.workDir, d.allocation, fileMeta, util.NewStreamReader(r), isUpdate, false,
 		sdk.WithStatusCallback(cb),
-		sdk.WithChunkSize(chunkSize),
 		sdk.WithEncrypt(d.encrypt),
 	)
 
