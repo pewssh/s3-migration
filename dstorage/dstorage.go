@@ -13,8 +13,6 @@ import (
 	"github.com/0chain/s3migration/util"
 	zerror "github.com/0chain/s3migration/zErrors"
 
-	"github.com/0chain/gosdk/core/common"
-	"github.com/0chain/gosdk/zboxcore/fileref"
 	"github.com/0chain/gosdk/zboxcore/sdk"
 )
 
@@ -46,8 +44,6 @@ type DStoreI interface {
 type DStorageService struct {
 	allocation *sdk.Allocation
 	encrypt    bool // Should encrypt before uploading/updating
-	//After file is available in dStorage owner can decide who is going to pay for read
-	whoPays common.WhoPays
 	//Where to migrate all buckets to. Default is /
 	migrateTo string
 	//Duplicate suffix to use if file already exists in dStorage. So if remotepath if /path/to/remote/file.txt
@@ -92,16 +88,11 @@ func (d *DStorageService) Upload(ctx context.Context, remotePath string, r io.Re
 		errCh:  make(chan error, 1),
 	}
 
-	attrs := fileref.Attributes{
-		WhoPaysForReads: d.whoPays,
-	}
-
 	fileMeta := sdk.FileMeta{
 		RemotePath: filepath.Clean(remotePath),
 		ActualSize: size,
 		MimeType:   contentType,
 		RemoteName: filepath.Base(remotePath),
-		Attributes: attrs,
 	}
 
 	chunkUpload, err := sdk.CreateChunkedUpload(d.workDir, d.allocation, fileMeta, util.NewStreamReader(r), isUpdate, false,
@@ -190,7 +181,6 @@ func GetDStorageService(allocationID, migrateTo, duplicateSuffix, workDir string
 	return &DStorageService{
 		allocation:      allocation,
 		encrypt:         encrypt,
-		whoPays:         common.WhoPays(whoPays),
 		migrateTo:       migrateTo,
 		duplicateSuffix: duplicateSuffix,
 		workDir:         workDir,
