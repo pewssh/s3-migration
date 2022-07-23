@@ -1,7 +1,5 @@
 aws_access_key: "ACCESSKEY"
 aws_secret_key: "SECRETkEY"
-buckets:
-  buck1
-  buck2
-  buck3
-
+region: "us-east-2"
+bucket: "bucketName" # Bucket to migrate from
+prefix: "prefix" # prefix that is used to consider objects that has this prefix

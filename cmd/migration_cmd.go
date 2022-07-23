@@ -46,18 +46,18 @@ func init() {
 	//flags related to dStorage
 	migrateCmd.PersistentFlags().StringVar(&allocationId, "allocation", "", "allocation ID for dStorage")
 	migrateCmd.Flags().StringVar(&allocationTextPath, "alloc-path", "", "File Path to allocation text")
-	migrateCmd.Flags().BoolVar(&ownerPays, "owner-pays", true, "Read payment source(Default: owner pays)")
 	migrateCmd.Flags().BoolVar(&encrypt, "encrypt", false, "pass this option to encrypt and upload the file")
 	//flags related to s3
 	migrateCmd.PersistentFlags().StringVar(&accessKey, "access-key", "", "access-key of aws")
 	migrateCmd.PersistentFlags().StringVar(&secretKey, "secret-key", "", "secret-key of aws")
+	migrateCmd.Flags().StringVar(&awsCredPath, "aws-cred-path", "", "File Path to aws credentials")
 	migrateCmd.PersistentFlags().StringVar(&bucket, "bucket", "", "Bucket to migrate")
+	migrateCmd.MarkFlagRequired("bucket")
 	migrateCmd.PersistentFlags().StringVar(&prefix, "prefix", "", "Migrate objects starting with this prefix")
 	migrateCmd.PersistentFlags().StringVar(&region, "region", "us-east-2", "Bucket location")
-	migrateCmd.Flags().StringVar(&migrateToPath, "migrate-to", "/", "Remote path where buckets will be migrated to")
+	migrateCmd.Flags().StringVar(&migrateToPath, "migrate-to", "/", "Remote path where bucket's objects will be migrated to")
 	migrateCmd.Flags().StringVar(&duplicateSuffix, "dup-suffix", "_copy", "Duplicate suffix to use for migrated file")
 	migrateCmd.Flags().BoolVar(&deleteSource, "delete-source", false, "Delete object in s3 that is migrated to dStorage")
-	migrateCmd.Flags().StringVar(&awsCredPath, "aws-cred-path", "", "File Path to aws credentials")
 	migrateCmd.Flags().StringVar(&workDir, "wd", filepath.Join(util.GetHomeDir(), ".s3migration"), "Working directory")
 	migrateCmd.Flags().IntVar(&concurrency, "concurrency", 10, "number of concurrent files to process concurrently during migration")
 	migrateCmd.Flags().BoolVar(&resume, "resume", false, "pass this option to resume migration from previous state")
@@ -71,12 +71,18 @@ func init() {
 var migrateCmd = &cobra.Command{
 	Use:   "migrate",
 	Short: "Migrate user data from S3 bucket to dStorage",
-	Long: `Migrate files from s3 buckets to some remote directory(default is /) by using aws-s3-sdk and 0chain gosdk. All the objects from bucket will be migrated.
-	However user can specify some prefix to migrate only the files with those prefix. Also if there is name conflict within dStorage file and bucket file use can 
-	specify whether to skip, replace or duplicate them. Migration state is maintained is some file so user can also resume migration operation if some error had 
-	occurred in previous migration session. User can also specify whether to delete migrated file. Note the defaults.
+	Long: `Migrate files from s3 buckets to some remote directory(default is /) by using aws-s3-sdk and 0chain gosdk.
+	All the objects from bucket will be migrated. However user can specify some prefix to migrate only the files with
+	those prefix. Also if there is name conflict within dStorage file and bucket file use can specify whether to skip,
+	replace or duplicate them. Migration state is maintained is some file so user can also resume migration operation
+	if some error had occurred in previous migration session. User can also specify whether to delete migrated file.
+	Note the defaults.
 
-	Note: Addition of new object or modification of existing file while migrating is not recommended, as it cannot track such changes and you might loose your data.
+	Note: Parameters passed with flag are first priority, with environment variable are second priority and with file path
+	are third priority.
+
+	Note: Addition of new object or modification of existing file while migrating is not recommended, as it cannot track
+	such changes and you might loose your data.
 	`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		_ = cmd.Flags().Parse(args)
@@ -85,7 +91,7 @@ var migrateCmd = &cobra.Command{
 		if allocationId == "" {
 			if allocationId = util.GetAllocationIDFromEnv(); allocationId == "" {
 				if allocationTextPath == "" {
-					return errors.New("allocation text file not passed in argument")
+					return errors.New("allocation id is missing")
 				}
 
 				allocationId, err = util.GetAllocationIDFromFile(allocationTextPath)
@@ -102,7 +108,7 @@ var migrateCmd = &cobra.Command{
 		if accessKey == "" || secretKey == "" {
 			if accessKey, secretKey = util.GetAwsCredentialsFromEnv(); accessKey == "" || secretKey == "" {
 				if awsCredPath == "" {
-					return errors.New("aws credentials path missing")
+					return errors.New("aws credentials missing")
 				}
 				if accessKey, secretKey = util.GetAwsCredentialsFromFile(awsCredPath); accessKey == "" || secretKey == "" {
 					return fmt.Errorf("empty access or secret key. Access Key:%v\tSecret Key: %v", accessKey, secretKey)

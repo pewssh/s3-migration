@@ -6,9 +6,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
+	"github.com/0chain/gosdk/core/encryption"
 	zlogger "github.com/0chain/s3migration/logger"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
@@ -218,7 +218,7 @@ func (a *AwsClient) DownloadToFile(ctx context.Context, objectKey string) (strin
 		Key:    aws.String(objectKey),
 	}
 
-	fileName := strings.ReplaceAll(objectKey, "/", "")
+	fileName := encryption.Hash(objectKey)
 	downloadPath := filepath.Join(a.workDir, fileName)
 	f, err := os.Create(downloadPath)
 	if err != nil {
