@@ -14,7 +14,7 @@ if [ -z "$DOCKER_BUILD" ]; then
 fi
 
 if [ -z "$DOCKER_IMAGE" ]; then  
-    DOCKER_IMAGE="s3mgrt"
+    DOCKER_IMAGE="-t s3mgrt"
 fi
 echo "  DOCKER_BUILD=$DOCKER_BUILD"
 echo "  DOCKER_IMAGE=$DOCKER_IMAGE"
@@ -28,4 +28,4 @@ echo "  DOCKER_IMAGE=$DOCKER_IMAGE"
 
 echo ""
 echo "2> docker build"
-DOCKER_BUILDKIT=1 docker $DOCKER_BUILD --progress=plain -f docker.local/Dockerfile . -t $DOCKER_IMAGE
+DOCKER_BUILDKIT=1 docker $DOCKER_BUILD --progress=plain -f docker.local/Dockerfile . $DOCKER_IMAGE
