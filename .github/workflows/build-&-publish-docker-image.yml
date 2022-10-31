@@ -57,6 +57,6 @@ jobs:
         run: |
           SHORT_SHA=$(echo ${{ env.SHA }} | head -c 8)
           export DOCKER_BUILD="buildx build --platform linux/amd64,linux/arm64 --push"
-          export DOCKER_IMAGE_BLOBBER="-t ${S3MGRT_REGISTRY}:${TAG} -t ${S3MGRT_REGISTRY}:${TAG}-${SHORT_SHA}"
+          export DOCKER_IMAGE="-t ${S3MGRT_REGISTRY}:${TAG} -t ${S3MGRT_REGISTRY}:${TAG}-${SHORT_SHA}"
               
           ./docker.local/bin/build.sh

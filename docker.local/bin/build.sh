@@ -13,11 +13,11 @@ if [ -z "$DOCKER_BUILD" ]; then
     fi
 fi
 
-if [ -z "$DOCKER_IMAGE_BASE" ]; then  
-    DOCKER_IMAGE_BASE="s3mgrt-build"
+if [ -z "$DOCKER_IMAGE" ]; then  
+    DOCKER_IMAGE="s3mgrt"
 fi
 echo "  DOCKER_BUILD=$DOCKER_BUILD"
-echo "  DOCKER_IMAGE_BASE=$DOCKER_IMAGE_BASE"
+echo "  DOCKER_IMAGE=$DOCKER_IMAGE"
 
 # echo ""
 # echo "2> download herumi"
@@ -28,4 +28,4 @@ echo "  DOCKER_IMAGE_BASE=$DOCKER_IMAGE_BASE"
 
 echo ""
 echo "2> docker build"
-DOCKER_BUILDKIT=1 docker $DOCKER_BUILD --progress=plain -f docker.local/Dockerfile . -t $DOCKER_IMAGE_BASE
+DOCKER_BUILDKIT=1 docker $DOCKER_BUILD --progress=plain -f docker.local/Dockerfile . -t $DOCKER_IMAGE

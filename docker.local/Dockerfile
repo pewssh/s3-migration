@@ -56,4 +56,3 @@ COPY --from=s3mgrt-build  /usr/local/lib/libmcl*.so \
                         /usr/local/lib/
 
 COPY --from=s3mgrt-build /0chain/s3mgrt /usr/local/bin/s3mgrt
-
