@@ -9,7 +9,7 @@ default: help
 gomod-tidy:
 	@go mod tidy
 
-build: gomod-tidy
+build:
 	@$(eval VERSION=$(shell git describe --tags --dirty --always))
 	CGO_ENABLED=1 go build -x -v -tags bn256 -ldflags "-X github.com/0chain/s3migration/cmd.VersionStr=$(VERSION)" -o s3mgrt main.go
 
