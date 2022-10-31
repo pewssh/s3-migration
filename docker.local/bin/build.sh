@@ -19,13 +19,6 @@ fi
 echo "  DOCKER_BUILD=$DOCKER_BUILD"
 echo "  DOCKER_IMAGE=$DOCKER_IMAGE"
 
-# echo ""
-# echo "2> download herumi"
-
-# [ ! -f ./docker.local/bin/mcl.tar.gz ] && wget -O ./docker.local/bin/mcl.tar.gz https://github.com/herumi/mcl/archive/refs/tags/v1.57.tar.gz 
-
-# [ ! -f ./docker.local/bin/bls.tar.gz ] && wget -O ./docker.local/bin/bls.tar.gz https://github.com/herumi/bls/archive/refs/tags/v1.22.tar.gz
-
 echo ""
 echo "2> docker build"
 DOCKER_BUILDKIT=1 docker $DOCKER_BUILD --progress=plain -f docker.local/Dockerfile . $DOCKER_IMAGE
