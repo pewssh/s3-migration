@@ -73,7 +73,6 @@ func InitMigration(mConfig *MigrationConfig) error {
 		mConfig.DuplicateSuffix,
 		mConfig.WorkDir,
 		mConfig.Encrypt,
-		mConfig.WhoPays,
 	)
 	if err != nil {
 		zlogger.Logger.Error(err)
@@ -169,7 +168,7 @@ func StartMigration() error {
 		zlogger.Logger.Info("time taken: ", time.Since(start))
 	}(time.Now())
 
-	migrationWorker := NewMigrationWorker()
+	migrationWorker := NewMigrationWorker(migration.workDir)
 	go migration.DownloadWorker(rootContext, migrationWorker)
 	go migration.UploadWorker(rootContext, migrationWorker)
 	migration.UpdateStateFile(migrationWorker)
@@ -229,7 +228,11 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 }
 
 func (m *Migration) UploadWorker(ctx context.Context, migrator *MigrationWorker) {
-	defer migrator.CloseUploadQueue()
+	defer func() {
+		migrator.CloseUploadQueue()
+		migrator.fc()
+	}()
+
 	downloadQueue := migrator.GetDownloadQueue()
 	wg := &sync.WaitGroup{}
 	for d := range downloadQueue {

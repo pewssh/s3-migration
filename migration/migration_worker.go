@@ -1,9 +1,14 @@
 package migration
 
 import (
+	"os"
+	"path/filepath"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	zlogger "github.com/0chain/s3migration/logger"
 )
 
 const (
@@ -14,17 +19,53 @@ const (
 	downloadSizeLimit        = int64(1024*1024) * int64(500)
 )
 
+const (
+	uploadCountFileName = "upload.count"
+)
+
+func initUploadCountFD(fPath string) (func(), func()) {
+	f, err := os.Create(fPath)
+	if err != nil {
+		panic(err)
+	}
+	countMu := &sync.Mutex{}
+	var count int64
+	return func() {
+		countMu.Lock()
+		defer countMu.Unlock()
+		count++
+		err := f.Truncate(0)
+		if err != nil {
+			zlogger.Logger.Error(err)
+		}
+		_, err = f.Seek(0, 0)
+		if err != nil {
+			zlogger.Logger.Error(err)
+		}
+		_, err = f.WriteString(strconv.FormatInt(count, 10))
+		if err != nil {
+			zlogger.Logger.Error(err)
+		}
+
+	}, func() { f.Close() }
+}
+
 type MigrationWorker struct {
 	diskMutex             *sync.RWMutex
 	errMutex              *sync.RWMutex
+	countMu               *sync.Mutex
 	currentFileSizeOnDisk int64
-	downloadQueue         chan *DownloadObjectMeta
-	uploadQueue           chan *UploadObjectMeta
-	downloadConcurrency   int32
-	uploadConcurrency     int32
-	errInSystem           error
-	currentUploadSize     int64
-	currentDownloadSize   int64
+	// ufc --> file descriptor for filecount update.
+	ucf func()
+	// fc --> file closing function
+	fc                  func()
+	downloadQueue       chan *DownloadObjectMeta
+	uploadQueue         chan *UploadObjectMeta
+	downloadConcurrency int32
+	uploadConcurrency   int32
+	errInSystem         error
+	currentUploadSize   int64
+	currentDownloadSize int64
 }
 
 type DownloadObjectMeta struct {
@@ -43,13 +84,19 @@ type UploadObjectMeta struct {
 	ErrChan   chan error
 }
 
-func NewMigrationWorker() *MigrationWorker {
-	return &MigrationWorker{
+func NewMigrationWorker(wd string) *MigrationWorker {
+	mw := &MigrationWorker{
 		diskMutex:     &sync.RWMutex{},
 		errMutex:      &sync.RWMutex{},
+		countMu:       &sync.Mutex{},
 		downloadQueue: make(chan *DownloadObjectMeta, 10000),
 		uploadQueue:   make(chan *UploadObjectMeta, 10000),
 	}
+
+	fPath := filepath.Join(wd, uploadCountFileName)
+	mw.ucf, mw.fc = initUploadCountFD(fPath)
+
+	return mw
 }
 
 func (m *MigrationWorker) updateFileSizeOnDisk(size int64) {
@@ -96,6 +143,8 @@ func (m *MigrationWorker) UploadDone(u *UploadObjectMeta, err error) {
 	atomic.AddInt64(&m.currentUploadSize, -u.Size)
 	if err != nil {
 		u.ErrChan <- err
+	} else {
+		m.ucf()
 	}
 	u.DoneChan <- struct{}{}
 }
@@ -127,6 +176,7 @@ func (m *MigrationWorker) PauseDownload() {
 }
 
 func (m *MigrationWorker) DownloadStart(d *DownloadObjectMeta) {
+	zlogger.Logger.Info("Started to download ", d.ObjectKey)
 	m.incrDownloadConcurrency()
 	m.downloadQueue <- d
 	m.updateFileSizeOnDisk(d.Size)
@@ -138,9 +188,11 @@ func (m *MigrationWorker) DownloadDone(d *DownloadObjectMeta, localPath string, 
 	atomic.AddInt64(&m.currentDownloadSize, -d.Size)
 	if err != nil {
 		d.ErrChan <- err
+		zlogger.Logger.Error("Error while downloading ", d.ObjectKey, " Error: ", err)
 	} else {
 		d.LocalPath = localPath
 		d.DoneChan <- struct{}{}
+		zlogger.Logger.Info("Downloaded ", d.ObjectKey)
 	}
 }
 
@@ -160,6 +212,7 @@ func (m *MigrationWorker) IsMigrationError() bool {
 
 func (m *MigrationWorker) SetMigrationError(err error) {
 	if err != nil {
+		zlogger.Logger.Error("Setting migration error: ", err)
 		m.errMutex.Lock()
 		defer m.errMutex.Unlock()
 		m.errInSystem = err
