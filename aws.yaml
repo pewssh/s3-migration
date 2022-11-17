@@ -1,5 +1,5 @@
 aws_access_key: "ACCESSKEY"
 aws_secret_key: "SECRETkEY"
 region: "ap-northeast-2"
-bucket: "dayis3" # Bucket to migrate from
+bucket: "bucketName" # Bucket to migrate from
 prefix: "prefix" # prefix that is used to consider objects that has this prefix
