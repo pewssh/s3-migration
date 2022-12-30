@@ -3,6 +3,7 @@ package migration
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -25,11 +26,17 @@ const (
 	Duplicate        // Will add _copy prefix and uploads the file
 )
 
+const (
+	uploadCountFileName = "upload.count"
+	sourceDeleteFailed  = "source_delete.failed"
+)
+
 var migration Migration
 
 //Use context for all requests.
 var rootContext context.Context
 var rootContextCancel context.CancelFunc
+var dsFileHandler io.WriteCloser
 
 var StateFilePath = func(workDir, bucketName string) string {
 	return fmt.Sprintf("%v/%v.state", workDir, bucketName)
@@ -64,6 +71,35 @@ type Migration struct {
 	bucket        string
 }
 
+func updateTotalObjects(awsStorageService *s3.AwsClient, wd string) error {
+	f, err := os.Create(filepath.Join(wd, "files.total"))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	var totalFiles int
+	objCh, errCh := awsStorageService.ListFilesInBucket(context.Background())
+
+L1:
+	for {
+		select {
+		case _, ok := <-objCh:
+			if !ok {
+				break L1
+			}
+			totalFiles++
+		case err = <-errCh:
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	_, err = f.WriteString(strconv.Itoa(totalFiles))
+	return err
+}
+
 func InitMigration(mConfig *MigrationConfig) error {
 	zlogger.Logger.Info("Initializing migration")
 	zlogger.Logger.Info("Getting dStorage service")
@@ -90,6 +126,12 @@ func InitMigration(mConfig *MigrationConfig) error {
 		mConfig.StartAfter,
 		mConfig.WorkDir,
 	)
+	if err != nil {
+		zlogger.Logger.Error(err)
+		return err
+	}
+
+	err = updateTotalObjects(awsStorageService, mConfig.WorkDir)
 	if err != nil {
 		zlogger.Logger.Error(err)
 		return err
@@ -122,19 +164,19 @@ func InitMigration(mConfig *MigrationConfig) error {
 	return nil
 }
 
-var updateStateKeyFunc = func(statePath string) (func(stateKey string), func(), error) {
+var updateKeyFunc = func(statePath string) (func(stateKey string), func(), error) {
 	f, err := os.Create(statePath)
 	if err != nil {
 		return nil, nil, err
 	}
 	var errorWhileWriting bool
-	stateKeyUpdater := func(stateKey string) {
+	keyUpdater := func(key string) {
 		if errorWhileWriting {
 			f, err = os.Create(statePath)
 			if err != nil {
 				return
 			}
-			_, err = f.Write([]byte(stateKey))
+			_, err = f.Write([]byte(key))
 			if err != nil {
 				return
 			}
@@ -152,7 +194,7 @@ var updateStateKeyFunc = func(statePath string) (func(stateKey string), func(), 
 			return
 		}
 
-		_, err = f.Write([]byte(stateKey))
+		_, err = f.Write([]byte(key))
 		if err != nil {
 			errorWhileWriting = true
 		}
@@ -160,13 +202,22 @@ var updateStateKeyFunc = func(statePath string) (func(stateKey string), func(), 
 
 	fileCloser := func() { f.Close() }
 
-	return stateKeyUpdater, fileCloser, nil
+	return keyUpdater, fileCloser, nil
 }
 
 func StartMigration() error {
 	defer func(start time.Time) {
 		zlogger.Logger.Info("time taken: ", time.Since(start))
 	}(time.Now())
+
+	if migration.deleteSource {
+		f, err := os.Create(filepath.Join(migration.workDir, sourceDeleteFailed))
+		if err != nil {
+			return err
+		}
+		dsFileHandler = f
+		defer dsFileHandler.Close()
+	}
 
 	migrationWorker := NewMigrationWorker(migration.workDir)
 	go migration.DownloadWorker(rootContext, migrationWorker)
@@ -186,6 +237,7 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 	objCh, errCh := migration.awsStore.ListFilesInBucket(rootContext)
 	wg := &sync.WaitGroup{}
 	for obj := range objCh {
+		zlogger.Logger.Info("Downloading object: ", obj.Key)
 		migrator.PauseDownload()
 		if migrator.IsMigrationError() {
 			return
@@ -203,11 +255,14 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 			defer wg.Done()
 			err := checkIsFileExist(ctx, downloadObjMeta)
 			if err != nil {
+				zlogger.Logger.Error(err)
 				migrator.SetMigrationError(err)
 				return
 			}
 			if downloadObjMeta.IsFileAlreadyExist && migration.skip == Skip {
 				zlogger.Logger.Info("Skipping migration of object" + downloadObjMeta.ObjectKey)
+				migrator.DownloadStart(downloadObjMeta)
+				migrator.DownloadDone(downloadObjMeta, "", nil)
 				return
 			}
 			migrator.DownloadStart(downloadObjMeta)
@@ -222,6 +277,7 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 	wg.Wait()
 	err := <-errCh
 	if err != nil {
+		zlogger.Logger.Error(err)
 		migrator.SetMigrationError(err)
 	}
 
@@ -230,12 +286,12 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 func (m *Migration) UploadWorker(ctx context.Context, migrator *MigrationWorker) {
 	defer func() {
 		migrator.CloseUploadQueue()
-		migrator.fc()
 	}()
 
 	downloadQueue := migrator.GetDownloadQueue()
 	wg := &sync.WaitGroup{}
 	for d := range downloadQueue {
+		zlogger.Logger.Info("Uploading object: ", d.ObjectKey)
 		migrator.PauseUpload()
 		downloadObj := d
 		uploadObj := &UploadObjectMeta{
@@ -249,18 +305,29 @@ func (m *Migration) UploadWorker(ctx context.Context, migrator *MigrationWorker)
 			defer wg.Done()
 			err := checkDownloadStatus(downloadObj)
 			if err != nil {
+				zlogger.Logger.Error(err)
 				migrator.SetMigrationError(err)
 				return
 			}
+			if downloadObj.IsFileAlreadyExist {
+				switch migration.skip {
+				case Skip:
+					migrator.UploadStart(uploadObj)
+					migrator.UploadDone(uploadObj, nil)
+					return
+				}
+			}
+
 			defer func() {
 				_ = m.fs.Remove(downloadObj.LocalPath)
 			}()
 			migrator.UploadStart(uploadObj)
-			zlogger.Logger.Info("upload start", uploadObj.ObjectKey, uploadObj.Size)
+			zlogger.Logger.Info("upload start; ", uploadObj.ObjectKey, uploadObj.Size)
 			err = util.Retry(3, time.Second*5, func() error {
 				err := processUpload(ctx, downloadObj)
 				return err
 			})
+
 			migrator.UploadDone(uploadObj, err)
 			migrator.SetMigrationError(err)
 			zlogger.Logger.Info("upload done", uploadObj.ObjectKey, uploadObj.Size, err)
@@ -320,7 +387,7 @@ func processUpload(ctx context.Context, downloadObj *DownloadObjectMeta) error {
 	}
 	mimeType, err := zboxutil.GetFileContentType(fileObj)
 	if err != nil {
-		zlogger.Logger.Error(err)
+		zlogger.Logger.Error("content type error: ", err, " file: ", fileInfo.Name(), " objKey:", downloadObj.ObjectKey)
 		return err
 	}
 
@@ -343,7 +410,10 @@ func processUpload(ctx context.Context, downloadObj *DownloadObjectMeta) error {
 		return err
 	} else {
 		if migration.deleteSource {
-			_ = migration.awsStore.DeleteFile(ctx, downloadObj.ObjectKey)
+			if err := migration.awsStore.DeleteFile(ctx, downloadObj.ObjectKey); err != nil {
+				zlogger.Logger.Error(err)
+				dsFileHandler.Write([]byte(downloadObj.ObjectKey + "\n"))
+			}
 		}
 		migration.szCtMu.Lock()
 		migration.migratedSize += uint64(downloadObj.Size)
@@ -354,17 +424,30 @@ func processUpload(ctx context.Context, downloadObj *DownloadObjectMeta) error {
 }
 
 func (m *Migration) UpdateStateFile(migrateHandler *MigrationWorker) {
-	updateState, closeStateFile, err := updateStateKeyFunc(migration.stateFilePath)
+	updateState, closeStateFile, err := updateKeyFunc(migration.stateFilePath)
 	if err != nil {
+		zlogger.Logger.Error(err)
 		migrateHandler.SetMigrationError(err)
 		return
 	}
 	defer closeStateFile()
+
+	updateMigratedFile, closeMigratedFile, err := updateKeyFunc(filepath.Join(migration.workDir, uploadCountFileName))
+	if err != nil {
+		zlogger.Logger.Error(err)
+		migrateHandler.SetMigrationError(err)
+		return
+	}
+	defer closeMigratedFile()
+
 	uploadQueue := migrateHandler.GetUploadQueue()
+	var totalMigrated int
 	for u := range uploadQueue {
 		select {
 		case <-u.DoneChan:
 			updateState(u.ObjectKey)
+			totalMigrated++
+			updateMigratedFile(strconv.Itoa(totalMigrated))
 		case <-u.ErrChan:
 			return
 		}

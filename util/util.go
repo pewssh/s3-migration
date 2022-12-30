@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	zlogger "github.com/0chain/s3migration/logger"
+
 	"github.com/spf13/viper"
 )
 
@@ -58,27 +60,32 @@ func SetAwsEnvCredentials(accessKey, secretKey string) (err error) {
 }
 
 func GetAwsCredentialsFromFile(credPath string) (accessKey, secretKey string) {
+	f, err := os.Open(credPath)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
 	v := viper.New()
-
-	v.AddConfigPath(credPath)
 	v.SetConfigType("yaml")
-
-	if err := v.ReadInConfig(); err != nil {
-		return
+	if err := v.ReadConfig(f); err != nil {
+		panic(err)
 	}
 
 	accessKey = v.GetString("aws_access_key")
 	secretKey = v.GetString("aws_secret_key")
-
 	return
 }
 
 func GetBucketRegionPrefixFromFile(credPath string) (bucket, region, prefix string, err error) {
-	v := viper.New()
+	f, err := os.Open(credPath)
+	if err != nil {
+		return
+	}
+	defer f.Close()
 
-	v.AddConfigPath(credPath)
+	v := viper.New()
 	v.SetConfigType("yaml")
-	if err = v.ReadInConfig(); err != nil {
+	if err = v.ReadConfig(f); err != nil {
 		return
 	}
 
@@ -109,7 +116,7 @@ func ConvertGoSDKTimeToTime(in string) time.Time {
 func Retry(attempts int, sleep time.Duration, f func() error) (err error) {
 	for i := 0; i < attempts; i++ {
 		if err = f(); err != nil {
-			log.Println("retrying after error:", err)
+			zlogger.Logger.Error("retrying after error:", err)
 			time.Sleep(sleep)
 			continue
 		}
