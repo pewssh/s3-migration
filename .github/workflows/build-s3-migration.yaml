@@ -1,5 +1,9 @@
 name: build-s3-migration
 
+concurrency:
+  group: "publish-${{ github.ref }}"
+  cancel-in-progress: true
+
 on:
   push:
     branches:
@@ -7,6 +11,8 @@ on:
       - staging
     tags:
       - 'v*.*.*'
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   build-linux:
@@ -24,7 +30,6 @@ jobs:
       - name: Set GITHUB_ENV
         run: |
           echo "BRANCH=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_ENV
-
           if [[ "${{github.base_ref}}" == "master" || "${{github.ref}}" == "refs/heads/master" ]]; then
             echo "TAG=v0.0.0-master" >> $GITHUB_ENV
           elif  [[ "${{github.base_ref}}" == "dev" || "${{github.ref}}" == "refs/heads/dev" ]]; then
@@ -34,12 +39,11 @@ jobs:
           else
             echo "TAG=$(echo ${GITHUB_REF#refs/tags/})" >> $GITHUB_ENV
           fi
-
       - name: Install
         run: make build
 
       - name: Zip release
-        run: tar -czvf s3mgrt-linux.tar.gz ./zsmgrt
+        run: tar -czvf s3mgrt-linux.tar.gz ./s3mgrt
 
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
@@ -86,9 +90,8 @@ jobs:
       
       - name: Zip Release
         run: |
-          copy zwallet s3mgrt.exe
+          copy s3mgrt s3mgrt.exe
           7z a s3mgrt-windows.zip s3mgrt.exe
-
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
         with:
@@ -119,7 +122,6 @@ jobs:
       - name: Set GITHUB_ENV
         run: |
           echo "BRANCH=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_ENV
-
           if [[ "${{github.base_ref}}" == "master" || "${{github.ref}}" == "refs/heads/master" ]]; then
             echo "TAG=v0.0.0-master" >> $GITHUB_ENV
           elif  [[ "${{github.base_ref}}" == "dev" || "${{github.ref}}" == "refs/heads/dev" ]]; then
@@ -129,7 +131,6 @@ jobs:
           else
             echo "TAG=$(echo ${GITHUB_REF#refs/tags/})" >> $GITHUB_ENV
           fi
-
       - name: Install
         run: make build
       
