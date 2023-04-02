@@ -26,7 +26,7 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v2
-      
+
       - name: Set GITHUB_ENV
         run: |
           echo "BRANCH=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_ENV
@@ -39,6 +39,12 @@ jobs:
           else
             echo "TAG=$(echo ${GITHUB_REF#refs/tags/})" >> $GITHUB_ENV
           fi
+
+      - name: add dependencies
+        run: |
+          sudo apt update -y
+          sudo apt -y install build-essential nghttp2 libnghttp2-dev libssl-dev wget
+
       - name: Install
         run: make build
 
@@ -84,10 +90,10 @@ jobs:
           } ELSE {
             echo "TAG=${{github.ref}}" | %{$_ -replace('refs/tags/', '')} | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
           }
-      
+
       - name: Install
         run: make build
-      
+
       - name: Zip Release
         run: |
           copy s3mgrt s3mgrt.exe
@@ -107,7 +113,7 @@ jobs:
           name: s3mgrt-windows
           path: s3mgrt
           retention-days: 5
-  
+
   build-macos:
     name: Build-macos
     runs-on: macos-runner-binary
@@ -118,7 +124,7 @@ jobs:
           go-version: '1.18' # The Go version to download (if necessary) and use.
       - name: Checkout
         uses: actions/checkout@v2
-      
+
       - name: Set GITHUB_ENV
         run: |
           echo "BRANCH=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_ENV
@@ -133,7 +139,7 @@ jobs:
           fi
       - name: Install
         run: make build
-      
+
       - name: Zip release
         run: tar -czvf s3mgrt-macos.tar.gz ./s3mgrt
 
