@@ -156,10 +156,6 @@ var migrateCmd = &cobra.Command{
 			workDir = filepath.Join(util.GetHomeDir(), ".s3migration")
 		}
 
-		if err := os.RemoveAll(workDir); err != nil {
-			return err
-		}
-
 		if err := os.MkdirAll(workDir, 0755); err != nil {
 			return err
 		}
@@ -217,7 +213,7 @@ var migrateCmd = &cobra.Command{
 	},
 }
 
-//getTimeFromDHString get timestamp before days and hours mentioned in string; eg 7d10h.
+// getTimeFromDHString get timestamp before days and hours mentioned in string; eg 7d10h.
 func getTimeFromDHString(s string) (t time.Time, err error) {
 	dhReg := `^(([0-9]*)d)?(([0-9]*)h)?$` //day hour regex; matches strings like: 7d10h, etc.
 	re := regexp.MustCompile(dhReg)
