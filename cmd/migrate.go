@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -154,6 +156,14 @@ var migrateCmd = &cobra.Command{
 
 		if workDir == "" {
 			workDir = filepath.Join(util.GetHomeDir(), ".s3migration")
+		}
+
+		dir, err := ioutil.ReadDir(workDir)
+		if err != nil {
+			return err
+		}
+		for _, d := range dir {
+			os.RemoveAll(path.Join([]string{"tmp", d.Name()}...))
 		}
 
 		if err := os.MkdirAll(workDir, 0755); err != nil {
