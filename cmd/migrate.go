@@ -165,7 +165,7 @@ var migrateCmd = &cobra.Command{
 		}
 
 		for _, d := range dir {
-			os.RemoveAll(path.Join([]string{"tmp", d.Name()}...))
+			os.RemoveAll(path.Join([]string{workDir, d.Name()}...))
 		}
 
 		var startAfter string
