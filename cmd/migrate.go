@@ -162,10 +162,10 @@ var migrateCmd = &cobra.Command{
 			if err := os.MkdirAll(workDir, 0755); err != nil {
 				return err
 			}
-		}
-
-		for _, d := range dir {
-			os.RemoveAll(path.Join([]string{workDir, d.Name()}...))
+		} else {
+			for _, d := range dir {
+				os.RemoveAll(path.Join([]string{workDir, d.Name()}...))
+			}
 		}
 
 		var startAfter string
