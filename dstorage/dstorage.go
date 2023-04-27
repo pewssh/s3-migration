@@ -125,7 +125,7 @@ func (d *DStorageService) Replace(ctx context.Context, remotePath string, r io.R
 func (d *DStorageService) Duplicate(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string) error {
 	li := strings.LastIndex(remotePath, ".")
 
-	duplicateSuffix := "_copy_" + strconv.FormatInt(time.Now().Unix(), 10)
+	duplicateSuffix := d.duplicateSuffix + "_" + strconv.FormatInt(time.Now().Unix(), 10)
 
 	if li == -1 || li == 0 {
 		remotePath = fmt.Sprintf("%s%s", remotePath, duplicateSuffix)
