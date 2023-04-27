@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -123,10 +124,44 @@ func (d *DStorageService) Replace(ctx context.Context, remotePath string, r io.R
 
 func (d *DStorageService) Duplicate(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string) error {
 	li := strings.LastIndex(remotePath, ".")
+
+	indexOfCopy := strings.LastIndex(remotePath, "copy") + 4
+
+	var duplicateSuffix string
+	duplicateSuffix = "_copy"
+
 	if li == -1 || li == 0 {
-		remotePath = fmt.Sprintf("%s%s", remotePath, d.duplicateSuffix)
+		if indexOfCopy > 0 {
+
+			duplicateSuffix = remotePath[indexOfCopy:li]
+
+			// convert duplicateSuffix to int
+			// increment duplicateSuffix by 1
+			// convert duplicateSuffix back to string
+			duplicateSuffixInt, _ := strconv.Atoi(duplicateSuffix)
+			duplicateSuffixInt++
+			duplicateSuffix = strconv.Itoa(duplicateSuffixInt)
+
+			fmt.Println("TYPE 1 LOG : ", indexOfCopy, duplicateSuffix)
+		}
+
+		remotePath = fmt.Sprintf("%s%s", remotePath, duplicateSuffix)
 	} else {
-		remotePath = fmt.Sprintf("%s%s.%s", remotePath[:li], d.duplicateSuffix, remotePath[li+1:])
+
+		if indexOfCopy > 0 {
+			duplicateSuffix = remotePath[indexOfCopy:li]
+
+			// convert duplicateSuffix to int
+			// increment duplicateSuffix by 1
+			// convert duplicateSuffix back to string
+			duplicateSuffixInt, _ := strconv.Atoi(duplicateSuffix)
+			duplicateSuffixInt++
+			duplicateSuffix = strconv.Itoa(duplicateSuffixInt)
+
+			fmt.Println("TYPE 2 LOG : ", indexOfCopy, duplicateSuffix)
+		}
+
+		remotePath = fmt.Sprintf("%s%s.%s", remotePath[:li], duplicateSuffix, remotePath[li+1:])
 	}
 
 	return d.Upload(ctx, remotePath, r, size, contentType, false)
