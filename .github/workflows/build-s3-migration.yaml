@@ -27,6 +27,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
+      - name: Get Branch
+         id: get_branch
+         run: |
+            BRANCH=$(echo ${GITHUB_REF#refs/heads/} | sed 's/\//-/g')
+            echo ::set-output name=BRANCH::${BRANCH}
+
       - name: Set GITHUB_ENV
         run: |
           echo "BRANCH=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_ENV
@@ -59,6 +65,19 @@ jobs:
           tag: ${{ env.TAG }}
           overwrite: true
           file_glob: true
+
+      - name: Set AWS credentials
+        if: steps.get_branch.outputs.BRANCH == "s3/binary"
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+
+      - name: Push to AWS S3
+        if: steps.get_branch.outputs.BRANCH == "s3/binary"
+        run: |
+          sudo aws s3 cp s3mgrt-linux s3://${{ secrets.S3_MIGRATION }}/s3mgrt123
 
       - name: 'Upload Artifact'
         uses: actions/upload-artifact@v2
