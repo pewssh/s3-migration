@@ -50,7 +50,7 @@ jobs:
       - name: add dependencies
         run: |
           sudo apt update -y
-          sudo apt -y install build-essential nghttp2 libnghttp2-dev libssl-dev wget
+          sudo apt -y install build-essential nghttp2 libnghttp2-dev libssl-dev wget awscli
 
       - name: Install
         run: make build
