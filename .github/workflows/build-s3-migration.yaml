@@ -85,7 +85,7 @@ jobs:
         # if: steps.get_branch.outputs.BRANCH == s3binary
         run: |
           pwd && ls
-          mkdir $HOME/.aws
+          mkdir -p $HOME/.aws
           touch $HOME/.aws/config
           touch $HOME/.aws/credentials
 
@@ -93,12 +93,14 @@ jobs:
           [default]
           region = us-east-2
           ' > $HOME/.aws/config
+          cat $HOME/.aws/config
 
           echo '
           [default]
           aws_access_key_id = default_access_key
           aws_secret_access_key = default_secret_key
           ' > $HOME/.aws/credentials
+          cat $HOME/.aws/credentials
 
           sed -i "s,default_access_key,${{ secrets.S3_ACCESS_KEY }},g" $HOME/.aws/credentials"
           sed -i "s,default_secret_key,${{ secrets.S3_SECRET_KEY }},g" $HOME/.aws/credentials"
