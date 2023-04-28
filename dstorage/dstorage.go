@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -123,10 +124,19 @@ func (d *DStorageService) Replace(ctx context.Context, remotePath string, r io.R
 
 func (d *DStorageService) Duplicate(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string) error {
 	li := strings.LastIndex(remotePath, ".")
-	if li == -1 || li == 0 {
-		remotePath = fmt.Sprintf("%s%s", remotePath, d.duplicateSuffix)
+
+	var duplicateSuffix string
+
+	if d.duplicateSuffix == "_copy" {
+		duplicateSuffix = d.duplicateSuffix + "_" + strconv.FormatInt(time.Now().Unix(), 10)
 	} else {
-		remotePath = fmt.Sprintf("%s%s.%s", remotePath[:li], d.duplicateSuffix, remotePath[li+1:])
+		duplicateSuffix = d.duplicateSuffix
+	}
+
+	if li == -1 || li == 0 {
+		remotePath = fmt.Sprintf("%s%s", remotePath, duplicateSuffix)
+	} else {
+		remotePath = fmt.Sprintf("%s%s.%s", remotePath[:li], duplicateSuffix, remotePath[li+1:])
 	}
 
 	return d.Upload(ctx, remotePath, r, size, contentType, false)
