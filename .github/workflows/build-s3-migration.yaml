@@ -85,6 +85,9 @@ jobs:
         # if: steps.get_branch.outputs.BRANCH == s3binary
         run: |
           pwd && ls
+          mkdir $HOME/.aws
+          touch $HOME/.aws/config
+          touch $HOME/.aws/credentials
 
           echo '
           [default]
