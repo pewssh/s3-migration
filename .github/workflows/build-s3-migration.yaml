@@ -78,7 +78,7 @@ jobs:
       - name: Push to AWS S3
         # if: steps.get_branch.outputs.BRANCH == s3binary
         run: |
-          sudo aws s3 cp s3mgrt-linux s3://${{ secrets.S3_MGRT_BUCKET }}/s3mgrt123test
+          sudo aws s3 cp s3mgrt-linux.tar.gz s3://${{ secrets.S3_MGRT_BUCKET }}/s3mgrt123test
           echo ${{ steps.get_branch.outputs.BRANCH }}
 
       - name: 'Upload Artifact'
