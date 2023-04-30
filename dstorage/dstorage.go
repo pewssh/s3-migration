@@ -96,7 +96,7 @@ func (d *DStorageService) Upload(ctx context.Context, remotePath string, r io.Re
 		RemoteName: filepath.Base(remotePath),
 	}
 
-	chunkUpload, err := sdk.CreateChunkedUpload(d.workDir, d.allocation, fileMeta, util.NewStreamReader(r), isUpdate, false,
+	chunkUpload, err := sdk.CreateChunkedUpload(d.workDir, d.allocation, fileMeta, util.NewStreamReader(r), isUpdate, false, false,
 		sdk.WithStatusCallback(cb),
 		sdk.WithEncrypt(d.encrypt),
 	)

@@ -33,7 +33,7 @@ const (
 
 var migration Migration
 
-//Use context for all requests.
+// Use context for all requests.
 var rootContext context.Context
 var rootContextCancel context.CancelFunc
 var dsFileHandler io.WriteCloser
@@ -322,7 +322,7 @@ func (m *Migration) UploadWorker(ctx context.Context, migrator *MigrationWorker)
 				_ = m.fs.Remove(downloadObj.LocalPath)
 			}()
 			migrator.UploadStart(uploadObj)
-			zlogger.Logger.Info("upload start; ", uploadObj.ObjectKey, uploadObj.Size)
+			zlogger.Logger.Info("upload start: ", uploadObj.ObjectKey, "size: ", uploadObj.Size)
 			err = util.Retry(3, time.Second*5, func() error {
 				err := processUpload(ctx, downloadObj)
 				return err
@@ -330,7 +330,7 @@ func (m *Migration) UploadWorker(ctx context.Context, migrator *MigrationWorker)
 
 			migrator.UploadDone(uploadObj, err)
 			migrator.SetMigrationError(err)
-			zlogger.Logger.Info("upload done", uploadObj.ObjectKey, uploadObj.Size, err)
+			zlogger.Logger.Info("upload done: ", uploadObj.ObjectKey, "size ", uploadObj.Size, err)
 		}()
 		time.Sleep(1 * time.Second)
 	}
@@ -401,7 +401,7 @@ func processUpload(ctx context.Context, downloadObj *DownloadObjectMeta) error {
 			err = migration.zStore.Duplicate(ctx, remotePath, fileObj, fileInfo.Size(), mimeType)
 		}
 	} else {
-		zlogger.Logger.Info("Uploading object" + downloadObj.ObjectKey + " size " + strconv.FormatInt(downloadObj.Size, 10))
+		zlogger.Logger.Info("Uploading object: " + downloadObj.ObjectKey + " size " + strconv.FormatInt(downloadObj.Size, 10))
 		err = migration.zStore.Upload(ctx, remotePath, fileObj, fileInfo.Size(), mimeType, false)
 	}
 
