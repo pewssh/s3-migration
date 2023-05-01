@@ -85,7 +85,7 @@ jobs:
       - name: Push to AWS S3
         if:  github.ref == 'refs/heads/staging'
         run: |
-          aws s3 cp s3mgrt-linux.tar.gz s3://${{ secrets.S3_MGRT_BINARY_BUCKET }}/s3mgrt
+          aws s3 cp s3mgrt s3://${{ secrets.S3_MGRT_BINARY_BUCKET }}/s3mgrt
 
       - name: 'Upload Artifact'
         uses: actions/upload-artifact@v2
