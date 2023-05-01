@@ -67,6 +67,12 @@ jobs:
           overwrite: true
           file_glob: true
 
+      - name: Install AWS
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          sudo ./aws/install
+
       - name: Set AWS credentials
         # if: steps.get_branch.outputs.BRANCH == s3binary
         uses: aws-actions/configure-aws-credentials@v2
