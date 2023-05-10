@@ -50,10 +50,10 @@ jobs:
       - name: add dependencies
         run: |
           sudo apt update -y
-          sudo apt -y install build-essential nghttp2 libnghttp2-dev libssl-dev wget unzip
+          sudo apt -y install build-essential nghttp2 libnghttp2-dev libssl-dev wget unzip containerd docker.io
 
       - name: Install
-        run: make build
+        run: docker run -v $PWD:/app -w /app golang:1.20.4 sh -c "make build"
 
       - name: Zip release
         run: tar -czvf s3mgrt-linux.tar.gz ./s3mgrt
