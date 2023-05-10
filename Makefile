@@ -3,7 +3,7 @@ ROOT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 
 .PHONY: help gomod-tidy install
 
-default: help 
+default: help
 
 #GO BUILD SDK
 gomod-tidy:
