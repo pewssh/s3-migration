@@ -6,7 +6,8 @@ LABEL zchain="s3mgrt"
 # RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 RUN apt update && apt -y install curl build-essential nghttp2 libnghttp2-dev libssl-dev containerd docker.io
 RUN curl -L -o go1.20.4.linux-amd64.tar.gz https://go.dev/dl/go1.20.4.linux-amd64.tar.gz
-RUN rm -rf /usr/local/go && tar -C /usr/local -xzf go1.20.4.linux-amd64.tar.gz
+RUN [ -d /usr/local/go ] && rm -rf /usr/local/go 
+RUN tar -C /usr/local -xzf go1.20.4.linux-amd64.tar.gz
 RUN export PATH=$PATH:/usr/local/go/bin
 ENV PATH=$PATH:/usr/local/go/bin
 RUN go version
