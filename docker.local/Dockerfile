@@ -39,7 +39,7 @@ COPY .  $SRC_DIR
 RUN make build
 
 FROM ubuntu:22.04
-RUN apk add gmp gmp-dev openssl-dev
+RUN sudo apt update && sudo apt -y install build-essential nghttp2 libnghttp2-dev libssl-dev containerd docker.io
 COPY --from=s3mgrt-build  /usr/local/lib/libmcl*.so \
                         /usr/local/lib/libbls*.so \
                         /usr/local/lib/
