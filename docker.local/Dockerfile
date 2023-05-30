@@ -1,21 +1,21 @@
-FROM golang:1.18-alpine3.16 as s3mgrt-build
+FROM golang:1.20-alpine3.18 as s3mgrt-build
 
 LABEL zchain="s3mgrt"
 
 # https://mirrors.alpinelinux.org/
 # RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 
-RUN echo "https://mirrors.aliyun.com/alpine/v3.14/main" >> /etc/apk/repositories
-RUN echo "https://mirrors.aliyun.com/alpine/v3.14/community" >> /etc/apk/repositories
+RUN echo "https://mirrors.aliyun.com/alpine/v3.18/main" >> /etc/apk/repositories
+RUN echo "https://mirrors.aliyun.com/alpine/v3.18/community" >> /etc/apk/repositories
 
-RUN echo "https://sjc.edge.kernel.org/alpine/v3.14/main" >> /etc/apk/repositories
-RUN echo "https://sjc.edge.kernel.org/alpine/v3.14/community" >> /etc/apk/repositories
+RUN echo "https://sjc.edge.kernel.org/alpine/v3.18/main" >> /etc/apk/repositories
+RUN echo "https://sjc.edge.kernel.org/alpine/v3.18/community" >> /etc/apk/repositories
 
-RUN echo "https://uk.alpinelinux.org/alpine/v3.14/main" >> /etc/apk/repositories
-RUN echo "https://uk.alpinelinux.org/alpine/v3.14/community" >> /etc/apk/repositories
+RUN echo "https://uk.alpinelinux.org/alpine/v3.18/main" >> /etc/apk/repositories
+RUN echo "https://uk.alpinelinux.org/alpine/v3.18/community" >> /etc/apk/repositories
 
-RUN echo "https://dl-4.alpinelinux.org/alpine/v3.14/main" >> /etc/apk/repositories
-RUN echo "https://dl-4.alpinelinux.org/alpine/v3.14/community" >> /etc/apk/repositories
+RUN echo "https://dl-4.alpinelinux.org/alpine/v3.18/main" >> /etc/apk/repositories
+RUN echo "https://dl-4.alpinelinux.org/alpine/v3.18/community" >> /etc/apk/repositories
 
 
 
