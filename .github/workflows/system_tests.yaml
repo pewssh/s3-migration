@@ -11,16 +11,8 @@ on:
         description: '0Box CLI branch which the tests will use'
         default: 'staging'
         required: true
-      s3_migration_cli_branch:
-        description: 's3-migration cli branch to deploy'
-        default: 'staging'
-        required: true
-      miner_branch:
-        description: 'miner branch to deploy'
-        default: 'staging'
-        required: true
-      sharder_branch:
-        description: 'sharder branch to deploy'
+      miner_sharder_branch:
+        description: 'miner/sharder branch to deploy'
         default: 'staging'
         required: true
       blobber_branch:
@@ -47,9 +39,10 @@ jobs:
   system-tests:
     uses: 0chain/actions/.github/workflows/manual_system_tests.yml@add/s3-migrt
     with:
+      s3_migration_cli_branch: ${{ github.ref_name }}
       system_tests_branch: ${{ github.event.inputs.system_tests_branch }}
-      miner_branch: ${{ github.event.inputs.miner_branch }}
-      sharder_branch: ${{ github.event.inputs.sharder_branch }}
+      miner_branch: ${{ github.event.inputs.miner_sharder_branch }}
+      sharder_branch: ${{ github.event.inputs.miner_sharder_branch }}
       zbox_cli_branch: ${{ github.event.inputs.zbox_cli_branch }}
       zwallet_cli_branch: ${{ github.ref_name }}
       blobber_branch: ${{ github.event.inputs.blobber_branch }}
@@ -59,7 +52,6 @@ jobs:
       zdns_branch: staging
       explorer_branch: staging
       zsearch_branch: staging
-      s3_migration_cli_branch: ${{ github.event.inputs.s3_migration_cli_branch }}
       test_file_filter: ${{ github.event.inputs.test_file_filter }}
       skip_tests: ${{ github.event.inputs.skip_tests }}
     secrets:
