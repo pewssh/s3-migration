@@ -1,25 +1,17 @@
-FROM golang:1.18-alpine3.16 as s3mgrt-build
+FROM ubuntu:22.04 as s3mgrt-build
 
 LABEL zchain="s3mgrt"
 
 # https://mirrors.alpinelinux.org/
 # RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+RUN apt update && apt -y install curl build-essential nghttp2 libnghttp2-dev libssl-dev containerd docker.io
 
-RUN echo "https://mirrors.aliyun.com/alpine/v3.14/main" >> /etc/apk/repositories
-RUN echo "https://mirrors.aliyun.com/alpine/v3.14/community" >> /etc/apk/repositories
-
-RUN echo "https://sjc.edge.kernel.org/alpine/v3.14/main" >> /etc/apk/repositories
-RUN echo "https://sjc.edge.kernel.org/alpine/v3.14/community" >> /etc/apk/repositories
-
-RUN echo "https://uk.alpinelinux.org/alpine/v3.14/main" >> /etc/apk/repositories
-RUN echo "https://uk.alpinelinux.org/alpine/v3.14/community" >> /etc/apk/repositories
-
-RUN echo "https://dl-4.alpinelinux.org/alpine/v3.14/main" >> /etc/apk/repositories
-RUN echo "https://dl-4.alpinelinux.org/alpine/v3.14/community" >> /etc/apk/repositories
-
-
-
-RUN apk add --update --no-cache build-base linux-headers git cmake bash perl grep gmp gmp-dev openssl-dev 
+RUN if [ "$(uname -m)" = "x86_64" ] ; then curl -L -o go1.20.4.tar.gz https://go.dev/dl/go1.20.4.linux-amd64.tar.gz ; else curl -L -o go1.20.4.tar.gz https://go.dev/dl/go1.20.4.linux-arm64.tar.gz ; fi
+# RUN [ -d /usr/local/go ] && rm -rf /usr/local/go 
+RUN tar -C /usr/local -xzf go1.20.4.tar.gz
+RUN export PATH=$PATH:/usr/local/go/bin
+ENV PATH=$PATH:/usr/local/go/bin
+RUN go version
 
 # # Install Herumi's cryptography
 # WORKDIR /tmp
@@ -49,8 +41,8 @@ RUN go mod download
 COPY .  $SRC_DIR
 RUN make build
 
-FROM alpine:3.16
-RUN apk add gmp gmp-dev openssl-dev
+FROM ubuntu:22.04
+RUN apt update && apt -y install build-essential nghttp2 libnghttp2-dev libssl-dev
 COPY --from=s3mgrt-build  /usr/local/lib/libmcl*.so \
                         /usr/local/lib/libbls*.so \
                         /usr/local/lib/
