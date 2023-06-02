@@ -185,3 +185,86 @@ jobs:
           name: s3mgrt-macos
           path: s3mgrt
           retention-days: 5
+
+  system-tests:
+    if: github.event_name != 'workflow_dispatch'
+    needs: build-linux
+    runs-on: [ tests-suite ]
+    timeout-minutes: 120
+    steps:
+      - name: "Get current PR"
+        uses: jwalton/gh-find-current-pr@v1
+        id: findPr
+        with:
+          github-token: ${{ github.token }}
+
+      - name: "Setup Test Run"
+        run: |
+          echo "NETWORK_URL=$(echo dev-${RUNNER_NAME:(-1)}.devnet-0chain.net)" >> $GITHUB_ENV
+          echo "RUNNER_NUMBER=${RUNNER_NAME:(-1)}" >> $GITHUB_ENV
+          echo "CURRENT_BRANCH=$(echo $(([ -z '${{ github.head_ref }}' ] && echo  ${GITHUB_REF#refs/*/}) || echo '${{ github.head_ref }}'))" >> $GITHUB_ENV
+
+      - name: "Set PR status as pending"
+        uses: 0chain/actions/set-pr-status@master
+        if: steps.findPr.outputs.number
+        with:
+          pr_number: ${{ steps.findPr.outputs.pr }}
+          description: "System tests running with default config..."
+          state: "pending"
+          repository: ${{ github.repository }}
+          status_name: "0Chain System Tests"
+          target_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          github_token: ${{ github.token }}
+
+      - name: "Deploy 0Chain"
+        uses: 0chain/actions/deploy-0chain@master
+        with:
+          kube_config: ${{ secrets[format('DEV{0}KC', env.RUNNER_NUMBER)] }}
+          teardown_condition: "TESTS_PASSED"
+          miner_image: staging
+          sharder_image: staging
+          blobber_image: staging
+          validator_image: staging
+          zbox_image: staging
+          zblock_image: staging
+          zdns_image: staging
+          explorer_image: latest
+          zsearch_image: staging
+          zbox_cli_branch: staging
+          zwallet_cli_branch: staging
+          SUBGRAPH_API_URL: ${{ secrets.SUBGRAPH_API_URL }}
+          TENDERLY_FORK_ID: ${{ secrets.TENDERLY_FORK_ID }}
+          graphnode_network: ${{ secrets.GRAPHNODE_NETWORK }}
+          graphnode_ethereum_node_url: https://rpc.tenderly.co/fork/${{ secrets.TENDERLY_FORK_ID }}
+
+      - name: "Run System tests"
+        uses: 0chain/actions/run-system-tests@master
+        with:
+          system_tests_branch: master
+          network: ${{ env.NETWORK_URL }}
+          s3_migration_branch: ${{ env.CURRENT_BRANCH }}
+          zbox_cli_branch: staging
+          zwallet_cli_branch: staging
+          svc_account_secret: ${{ secrets.SVC_ACCOUNT_SECRET }}
+          deploy_report_page: false
+          archive_results: true
+          run_flaky_tests: false
+          retry_failures: true
+          run_api_tests: false
+          TENDERLY_FORK_ID: ${{ secrets.TENDERLY_FORK_ID }}
+          DEVOPS_CHANNEL_WEBHOOK_URL: ${{ secrets.DEVOPS_CHANNEL_WEBHOOK_URL }}
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+          run_smoke_tests: ${{ github.ref != 'refs/heads/staging' && github.base_ref != 'staging' && github.ref != 'refs/heads/master' && github.base_ref != 'master' }}
+
+      - name: "Set PR status as ${{ job.status }}"
+        if: ${{ (success() || failure()) && steps.findPr.outputs.number }}
+        uses: 0chain/actions/set-pr-status@master
+        with:
+          pr_number: ${{ steps.findPr.outputs.pr }}
+          description: "System tests with default config ${{ job.status }}"
+          state: ${{ job.status }}
+          repository: ${{ github.repository }}
+          status_name: "0Chain System Tests"
+          target_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          github_token: ${{ github.token }}
