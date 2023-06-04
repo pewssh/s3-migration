@@ -92,7 +92,7 @@ func (d *DStorageService) Upload(ctx context.Context, remotePath string, r io.Re
 
 	fileMeta := sdk.FileMeta{
 		RemotePath: filepath.Clean(remotePath),
-		ActualSize: size,f
+		ActualSize: size,
 		MimeType:   contentType,
 		RemoteName: filepath.Base(remotePath),
 	}
