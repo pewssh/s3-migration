@@ -9,6 +9,7 @@ on:
     branches:
       - master
       - staging
+      - test-s3mgrt
     tags:
       - 'v*.*.*'
   pull_request:
@@ -53,7 +54,9 @@ jobs:
           sudo apt -y install build-essential nghttp2 libnghttp2-dev libssl-dev wget unzip containerd docker.io
 
       - name: Install
-        run: make build
+        run: |
+          docker build -t zbox_base -f docker.local/base.Dockerfile .
+          docker run --rm -v $PWD:/migrate --workdir=/migrate zbox_base make build
 
       - name: Zip release
         run: tar -czvf s3mgrt-linux.tar.gz ./s3mgrt
