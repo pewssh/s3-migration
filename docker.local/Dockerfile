@@ -1,50 +1,8 @@
-FROM ubuntu:22.04 as s3mgrt-build
+FROM golang:1.20.4-alpine3.18 as zbox_base
 
-LABEL zchain="s3mgrt"
+ RUN apk add --update --no-cache linux-headers build-base git cmake bash perl grep py3-pip python3-dev curl
 
-# https://mirrors.alpinelinux.org/
-# RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
-RUN apt update && apt -y install curl build-essential nghttp2 libnghttp2-dev libssl-dev containerd docker.io
-
-RUN if [ "$(uname -m)" = "x86_64" ] ; then curl -L -o go1.20.4.tar.gz https://go.dev/dl/go1.20.4.linux-amd64.tar.gz ; else curl -L -o go1.20.4.tar.gz https://go.dev/dl/go1.20.4.linux-arm64.tar.gz ; fi
-# RUN [ -d /usr/local/go ] && rm -rf /usr/local/go 
-RUN tar -C /usr/local -xzf go1.20.4.tar.gz
-RUN export PATH=$PATH:/usr/local/go/bin
-ENV PATH=$PATH:/usr/local/go/bin
-RUN go version
-
-# # Install Herumi's cryptography
-# WORKDIR /tmp
-
-# COPY ./docker.local/bin/mcl.tar.gz ./
-# COPY ./docker.local/bin/bls.tar.gz ./
-
-# RUN tar zxvf mcl.tar.gz && rm mcl.tar.gz && mv mcl* mcl
-
-# RUN tar zxvf bls.tar.gz && rm bls.tar.gz && mv bls* bls  
-
-# RUN make -C mcl -j $(nproc) lib/libmclbn256.so install 
-# RUN cp mcl/lib/libmclbn256.so /usr/local/lib 
-
-# RUN make MCL_DIR=$(pwd)/mcl -C bls -j $(nproc) install 
-
-# RUN rm -R /tmp/mcl && rm -R /tmp/bls
-
-ENV SRC_DIR=/0chain
-WORKDIR $SRC_DIR
-
-# Download the dependencies:
-# Will be cached if we don't change mod/sum files
-COPY ./go.mod ./go.sum $SRC_DIR
-RUN go mod download
-
-COPY .  $SRC_DIR
-RUN make build
-
-FROM ubuntu:22.04
-RUN apt update && apt -y install build-essential nghttp2 libnghttp2-dev libssl-dev
-COPY --from=s3mgrt-build  /usr/local/lib/libmcl*.so \
-                        /usr/local/lib/libbls*.so \
-                        /usr/local/lib/
-
-COPY --from=s3mgrt-build /0chain/s3mgrt /usr/local/bin/s3mgrt
+ RUN apk upgrade
+ # Install Herumi's cryptography
+ RUN apk del libstdc++ gmp-dev openssl-dev vips-dev
+ RUN apk add --update --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/main libstdc++ gmp-dev openssl-dev vips-dev 
