@@ -55,8 +55,7 @@ jobs:
 
       - name: Install
         run: |
-          docker build -t zbox_base -f docker.local/base.Dockerfile .
-          docker run --rm -v $PWD:/migrate --workdir=/migrate zbox_base make build
+          docker run --rm -v $PWD:/s3mgrt --workdir=/s3mgrt golang:1.20.4 make build
 
       - name: Zip release
         run: tar -czvf s3mgrt-linux.tar.gz ./s3mgrt
