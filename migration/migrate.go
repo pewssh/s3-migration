@@ -346,6 +346,7 @@ func (m *Migration) UploadWorker(ctx context.Context, migrator *MigrationWorker)
 				m.processMultiOperation(ctx, ops, migrator)
 				wg.Done()
 			}(processOps)
+			totalSize = 0
 			time.Sleep(1 * time.Second)
 		}
 	}

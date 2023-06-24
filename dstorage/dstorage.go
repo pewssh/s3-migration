@@ -58,6 +58,7 @@ type DStorageService struct {
 const (
 	GetRefRetryWaitTime = 500 * time.Millisecond
 	GetRefRetryCount    = 2
+	ChunkNumber         = 100
 )
 
 func (d *DStorageService) GetFileMetaData(ctx context.Context, remotePath string) (*sdk.ORef, error) {
@@ -146,12 +147,18 @@ func (d *DStorageService) Upload(ctx context.Context, remotePath string, r io.Re
 		opType = constants.FileOperationUpdate
 	}
 
+	options := []sdk.ChunkedUploadOption{
+		sdk.WithEncrypt(d.encrypt),
+		sdk.WithChunkNumber(ChunkNumber),
+	}
+
 	op := sdk.OperationRequest{
 		OperationType: opType,
 		FileMeta:      fileMeta,
 		Workdir:       d.workDir,
 		FileReader:    util.NewStreamReader(r),
 		RemotePath:    remotePath,
+		Opts:          options,
 	}
 	return op
 }
