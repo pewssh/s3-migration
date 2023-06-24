@@ -44,6 +44,7 @@ type UploadObjectMeta struct {
 	Size      int64
 	DoneChan  chan struct{}
 	ErrChan   chan error
+	LocalPath string
 }
 
 func NewMigrationWorker(wd string) *MigrationWorker {
