@@ -86,41 +86,6 @@ func (d *DStorageService) GetFileMetaData(ctx context.Context, remotePath string
 	return &oResult.Refs[0], nil
 }
 
-// func (d *DStorageService) Upload(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string, isUpdate bool) (err error) {
-// 	cb := &statusCB{
-// 		doneCh: make(chan struct{}, 1),
-// 		errCh:  make(chan error, 1),
-// 	}
-
-// 	fileMeta := sdk.FileMeta{
-// 		RemotePath: filepath.Clean(remotePath),
-// 		ActualSize: size,
-// 		MimeType:   contentType,
-// 		RemoteName: filepath.Base(remotePath),
-// 	}
-
-// 	chunkUpload, err := sdk.CreateChunkedUpload(d.workDir, d.allocation, fileMeta, util.NewStreamReader(r), isUpdate, false, false, zboxutil.NewConnectionId(),
-// 		sdk.WithStatusCallback(cb),
-// 		sdk.WithEncrypt(d.encrypt),
-// 	)
-
-// 	if err != nil {
-// 		return
-// 	}
-
-// 	err = chunkUpload.Start()
-// 	if err != nil {
-// 		return
-// 	}
-
-// 	select {
-// 	case <-cb.doneCh:
-// 	case err = <-cb.errCh:
-// 	}
-
-// 	return
-// }
-
 func (d *DStorageService) MultiUpload(ctx context.Context, ops []sdk.OperationRequest) (err error) {
 	err = d.allocation.DoMultiOperation(ops)
 	for _, op := range ops {

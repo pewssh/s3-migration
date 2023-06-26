@@ -80,7 +80,6 @@ type Migration struct {
 type MigrationOperation struct {
 	Operation sdk.OperationRequest
 	uploadObj *UploadObjectMeta
-	closeFile func() error
 }
 
 func updateTotalObjects(awsStorageService *s3.AwsClient, wd string) error {
@@ -424,7 +423,6 @@ func processOperation(ctx context.Context, downloadObj *DownloadObjectMeta) (Mig
 		zlogger.Logger.Info("Uploading object: " + downloadObj.ObjectKey + " size " + strconv.FormatInt(downloadObj.Size, 10))
 		fileOperation = migration.zStore.Upload(ctx, remotePath, fileObj, downloadObj.Size, mimeType, false)
 	}
-	op.closeFile = fileObj.Close
 	op.Operation = fileOperation
 	return op, nil
 }
@@ -483,7 +481,9 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 			migration.migratedSize += uint64(op.uploadObj.Size)
 			migration.totalMigratedObjects++
 			migration.szCtMu.Unlock()
-			_ = op.closeFile()
+			if closer, ok := op.Operation.FileReader.(io.Closer); ok {
+				_ = closer.Close()
+			}
 			_ = m.fs.Remove(op.uploadObj.LocalPath)
 		}
 	}()
