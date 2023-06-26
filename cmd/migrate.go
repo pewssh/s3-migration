@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -163,8 +162,8 @@ var migrateCmd = &cobra.Command{
 				return err
 			}
 		} else {
-			for _, d := range dir {
-				os.RemoveAll(path.Join([]string{workDir, d.Name()}...))
+			if len(dir) > 0 {
+				return fmt.Errorf("working directory not empty")
 			}
 		}
 
