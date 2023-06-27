@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/0chain/gosdk/zboxcore/zboxutil"
 	dStorage "github.com/0chain/s3migration/dstorage"
 	zlogger "github.com/0chain/s3migration/logger"
@@ -29,6 +30,11 @@ const (
 const (
 	uploadCountFileName = "upload.count"
 	sourceDeleteFailed  = "source_delete.failed"
+)
+
+const (
+	batchSize    = 50
+	maxBatchSize = 1024 * 1024 * 1024 // 1GB
 )
 
 var migration Migration
@@ -69,6 +75,11 @@ type Migration struct {
 	workDir       string
 	deleteSource  bool
 	bucket        string
+}
+
+type MigrationOperation struct {
+	Operation sdk.OperationRequest
+	uploadObj *UploadObjectMeta
 }
 
 func updateTotalObjects(awsStorageService *s3.AwsClient, wd string) error {
@@ -290,6 +301,8 @@ func (m *Migration) UploadWorker(ctx context.Context, migrator *MigrationWorker)
 
 	downloadQueue := migrator.GetDownloadQueue()
 	wg := &sync.WaitGroup{}
+	ops := make([]MigrationOperation, 0, batchSize)
+	totalSize := int64(0)
 	for d := range downloadQueue {
 		zlogger.Logger.Info("Uploading object: ", d.ObjectKey)
 		migrator.PauseUpload()
@@ -299,40 +312,49 @@ func (m *Migration) UploadWorker(ctx context.Context, migrator *MigrationWorker)
 			DoneChan:  make(chan struct{}, 1),
 			ErrChan:   make(chan error, 1),
 			Size:      downloadObj.Size,
+			LocalPath: downloadObj.LocalPath,
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			err := checkDownloadStatus(downloadObj)
-			if err != nil {
-				zlogger.Logger.Error(err)
-				migrator.SetMigrationError(err)
-				return
-			}
-			if downloadObj.IsFileAlreadyExist {
-				switch migration.skip {
-				case Skip:
-					migrator.UploadStart(uploadObj)
-					migrator.UploadDone(uploadObj, nil)
-					return
-				}
-			}
-
-			defer func() {
-				_ = m.fs.Remove(downloadObj.LocalPath)
-			}()
-			migrator.UploadStart(uploadObj)
-			zlogger.Logger.Info("upload start: ", uploadObj.ObjectKey, "size: ", uploadObj.Size)
-			err = util.Retry(3, time.Second*5, func() error {
-				err := processUpload(ctx, downloadObj)
-				return err
-			})
-
-			migrator.UploadDone(uploadObj, err)
+		err := checkDownloadStatus(downloadObj)
+		if err != nil {
+			zlogger.Logger.Error(err)
 			migrator.SetMigrationError(err)
-			zlogger.Logger.Info("upload done: ", uploadObj.ObjectKey, "size ", uploadObj.Size, err)
-		}()
-		time.Sleep(1 * time.Second)
+			continue
+		}
+		if downloadObj.IsFileAlreadyExist {
+			switch migration.skip {
+			case Skip:
+				migrator.UploadStart(uploadObj)
+				migrator.UploadDone(uploadObj, nil)
+				continue
+			}
+		}
+		op, err := processOperation(ctx, downloadObj)
+		if err != nil {
+			zlogger.Logger.Error(err)
+			migrator.SetMigrationError(err)
+			continue
+		}
+		op.uploadObj = uploadObj
+		ops = append(ops, op)
+		totalSize += downloadObj.Size
+		if len(ops) >= batchSize || totalSize >= maxBatchSize {
+			processOps := ops
+			ops = nil
+			wg.Add(1)
+			go func(ops []MigrationOperation) {
+				m.processMultiOperation(ctx, ops, migrator)
+				wg.Done()
+			}(processOps)
+			totalSize = 0
+			time.Sleep(1 * time.Second)
+		}
+	}
+	if len(ops) > 0 {
+		wg.Add(1)
+		go func(ops []MigrationOperation) {
+			m.processMultiOperation(ctx, ops, migrator)
+			wg.Done()
+		}(ops)
 	}
 	wg.Wait()
 }
@@ -369,58 +391,49 @@ func checkDownloadStatus(downloadObj *DownloadObjectMeta) error {
 	}
 }
 
-func processUpload(ctx context.Context, downloadObj *DownloadObjectMeta) error {
+func processOperation(ctx context.Context, downloadObj *DownloadObjectMeta) (MigrationOperation, error) {
 	remotePath := getRemotePath(downloadObj.ObjectKey)
-
+	var op MigrationOperation
 	fileObj, err := migration.fs.Open(downloadObj.LocalPath)
 	if err != nil {
 		zlogger.Logger.Error(err)
-		return err
+		return op, err
 	}
-
-	defer fileObj.Close()
-
 	fileInfo, err := fileObj.Stat()
 	if err != nil {
 		zlogger.Logger.Error(err)
-		return err
+		return op, err
 	}
 	mimeType, err := zboxutil.GetFileContentType(fileObj)
 	if err != nil {
 		zlogger.Logger.Error("content type error: ", err, " file: ", fileInfo.Name(), " objKey:", downloadObj.ObjectKey)
-		return err
+		return op, err
 	}
-
+	var fileOperation sdk.OperationRequest
 	if downloadObj.IsFileAlreadyExist {
 		switch migration.skip {
 		case Replace:
 			zlogger.Logger.Info("Replacing object" + downloadObj.ObjectKey + " size " + strconv.FormatInt(downloadObj.Size, 10))
-			err = migration.zStore.Replace(ctx, remotePath, fileObj, fileInfo.Size(), mimeType)
+			fileOperation = migration.zStore.Replace(ctx, remotePath, fileObj, downloadObj.Size, mimeType)
 		case Duplicate:
 			zlogger.Logger.Info("Duplicating object" + downloadObj.ObjectKey + " size " + strconv.FormatInt(downloadObj.Size, 10))
-			err = migration.zStore.Duplicate(ctx, remotePath, fileObj, fileInfo.Size(), mimeType)
+			fileOperation = migration.zStore.Duplicate(ctx, remotePath, fileObj, downloadObj.Size, mimeType)
 		}
 	} else {
 		zlogger.Logger.Info("Uploading object: " + downloadObj.ObjectKey + " size " + strconv.FormatInt(downloadObj.Size, 10))
-		err = migration.zStore.Upload(ctx, remotePath, fileObj, fileInfo.Size(), mimeType, false)
+		fileOperation = migration.zStore.Upload(ctx, remotePath, fileObj, downloadObj.Size, mimeType, false)
 	}
+	op.Operation = fileOperation
+	return op, nil
+}
 
+func processUpload(ctx context.Context, ops []sdk.OperationRequest) error {
+
+	err := migration.zStore.MultiUpload(ctx, ops)
 	if err != nil {
 		zlogger.Logger.Error(err)
-		return err
-	} else {
-		if migration.deleteSource {
-			if err := migration.awsStore.DeleteFile(ctx, downloadObj.ObjectKey); err != nil {
-				zlogger.Logger.Error(err)
-				dsFileHandler.Write([]byte(downloadObj.ObjectKey + "\n"))
-			}
-		}
-		migration.szCtMu.Lock()
-		migration.migratedSize += uint64(downloadObj.Size)
-		migration.totalMigratedObjects++
-		migration.szCtMu.Unlock()
-		return nil
 	}
+	return err
 }
 
 func (m *Migration) UpdateStateFile(migrateHandler *MigrationWorker) {
@@ -452,4 +465,41 @@ func (m *Migration) UpdateStateFile(migrateHandler *MigrationWorker) {
 			return
 		}
 	}
+}
+
+func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOperation, migrator *MigrationWorker) {
+	var err error
+	defer func() {
+		for _, op := range ops {
+			if migration.deleteSource && err == nil {
+				if deleteErr := migration.awsStore.DeleteFile(ctx, op.uploadObj.ObjectKey); deleteErr != nil {
+					zlogger.Logger.Error(deleteErr)
+					dsFileHandler.Write([]byte(op.uploadObj.ObjectKey + "\n"))
+				}
+			}
+			migration.szCtMu.Lock()
+			migration.migratedSize += uint64(op.uploadObj.Size)
+			migration.totalMigratedObjects++
+			migration.szCtMu.Unlock()
+			if closer, ok := op.Operation.FileReader.(*util.StreamReader); ok {
+				_ = closer.Close()
+			}
+			_ = m.fs.Remove(op.uploadObj.LocalPath)
+		}
+	}()
+	fileOps := make([]sdk.OperationRequest, 0, len(ops))
+	for _, op := range ops {
+		migrator.UploadStart(op.uploadObj)
+		zlogger.Logger.Info("upload start: ", op.uploadObj.ObjectKey, "size: ", op.uploadObj.Size)
+		fileOps = append(fileOps, op.Operation)
+	}
+	err = util.Retry(3, time.Second*5, func() error {
+		err := processUpload(ctx, fileOps)
+		return err
+	})
+	for _, op := range ops {
+		migrator.UploadDone(op.uploadObj, err)
+		zlogger.Logger.Info("upload done: ", op.uploadObj.ObjectKey, "size ", op.uploadObj.Size, err)
+	}
+	migrator.SetMigrationError(err)
 }

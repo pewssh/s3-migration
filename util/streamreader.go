@@ -23,3 +23,10 @@ func (r *StreamReader) Read(p []byte) (int, error) {
 	}
 	return bLen, nil
 }
+
+func (r *StreamReader) Close() error {
+	if closer, ok := r.Reader.(io.Closer); ok {
+		return closer.Close()
+	}
+	return nil
+}

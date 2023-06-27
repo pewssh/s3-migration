@@ -14,8 +14,8 @@ import (
 	"github.com/0chain/s3migration/util"
 	zerror "github.com/0chain/s3migration/zErrors"
 
+	"github.com/0chain/gosdk/constants"
 	"github.com/0chain/gosdk/zboxcore/sdk"
-	"github.com/0chain/gosdk/zboxcore/zboxutil"
 )
 
 //use rate limiter here.
@@ -34,9 +34,10 @@ import (
 //go:generate mockgen -destination mocks/mock_dstorage.go -package mock_dstorage github.com/0chain/s3migration/dstorage DStoreI
 type DStoreI interface {
 	GetFileMetaData(ctx context.Context, remotePath string) (*sdk.ORef, error)
-	Replace(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string) error
-	Duplicate(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string) error
-	Upload(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string, isUpdate bool) error
+	Replace(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string) sdk.OperationRequest
+	Duplicate(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string) sdk.OperationRequest
+	Upload(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string, isUpdate bool) sdk.OperationRequest
+	MultiUpload(ctx context.Context, ops []sdk.OperationRequest) error
 	IsFileExist(ctx context.Context, remotePath string) (bool, error)
 	GetAvailableSpace() int64
 	GetTotalSpace() int64
@@ -57,6 +58,7 @@ type DStorageService struct {
 const (
 	GetRefRetryWaitTime = 500 * time.Millisecond
 	GetRefRetryCount    = 2
+	ChunkNumber         = 1000
 )
 
 func (d *DStorageService) GetFileMetaData(ctx context.Context, remotePath string) (*sdk.ORef, error) {
@@ -84,12 +86,20 @@ func (d *DStorageService) GetFileMetaData(ctx context.Context, remotePath string
 	return &oResult.Refs[0], nil
 }
 
-func (d *DStorageService) Upload(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string, isUpdate bool) (err error) {
-	cb := &statusCB{
-		doneCh: make(chan struct{}, 1),
-		errCh:  make(chan error, 1),
+func (d *DStorageService) MultiUpload(ctx context.Context, ops []sdk.OperationRequest) (err error) {
+	err = d.allocation.DoMultiOperation(ops)
+	for _, op := range ops {
+		f := op.FileReader.(util.File)
+		f.Close()
 	}
+	return err
+}
 
+func (d *DStorageService) Replace(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string) sdk.OperationRequest {
+	return d.Upload(ctx, remotePath, r, size, contentType, true)
+}
+
+func (d *DStorageService) Upload(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string, isUpdate bool) sdk.OperationRequest {
 	fileMeta := sdk.FileMeta{
 		RemotePath: filepath.Clean(remotePath),
 		ActualSize: size,
@@ -97,33 +107,28 @@ func (d *DStorageService) Upload(ctx context.Context, remotePath string, r io.Re
 		RemoteName: filepath.Base(remotePath),
 	}
 
-	chunkUpload, err := sdk.CreateChunkedUpload(d.workDir, d.allocation, fileMeta, util.NewStreamReader(r), isUpdate, false, false, zboxutil.NewConnectionId(),
-		sdk.WithStatusCallback(cb),
+	opType := constants.FileOperationInsert
+	if isUpdate {
+		opType = constants.FileOperationUpdate
+	}
+
+	options := []sdk.ChunkedUploadOption{
 		sdk.WithEncrypt(d.encrypt),
-	)
-
-	if err != nil {
-		return
+		sdk.WithChunkNumber(ChunkNumber),
 	}
 
-	err = chunkUpload.Start()
-	if err != nil {
-		return
+	op := sdk.OperationRequest{
+		OperationType: opType,
+		FileMeta:      fileMeta,
+		Workdir:       d.workDir,
+		FileReader:    util.NewStreamReader(r),
+		RemotePath:    remotePath,
+		Opts:          options,
 	}
-
-	select {
-	case <-cb.doneCh:
-	case err = <-cb.errCh:
-	}
-
-	return
+	return op
 }
 
-func (d *DStorageService) Replace(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string) error {
-	return d.Upload(ctx, remotePath, r, size, contentType, true)
-}
-
-func (d *DStorageService) Duplicate(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string) error {
+func (d *DStorageService) Duplicate(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string) sdk.OperationRequest {
 	li := strings.LastIndex(remotePath, ".")
 
 	var duplicateSuffix string
