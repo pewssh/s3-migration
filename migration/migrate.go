@@ -481,7 +481,7 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 			migration.migratedSize += uint64(op.uploadObj.Size)
 			migration.totalMigratedObjects++
 			migration.szCtMu.Unlock()
-			if closer, ok := op.Operation.FileReader.(io.Closer); ok {
+			if closer, ok := op.Operation.FileReader.(*util.StreamReader); ok {
 				_ = closer.Close()
 			}
 			_ = m.fs.Remove(op.uploadObj.LocalPath)
