@@ -244,7 +244,7 @@ jobs:
         with:
           system_tests_branch: master
           network: ${{ env.NETWORK_URL }}
-          s3_migration_branch: ${{ env.CURRENT_BRANCH }}
+          s3_migration_cli_branch: ${{ env.CURRENT_BRANCH }}
           zbox_cli_branch: staging
           zwallet_cli_branch: staging
           svc_account_secret: ${{ secrets.SVC_ACCOUNT_SECRET }}
