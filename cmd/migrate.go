@@ -60,7 +60,7 @@ func init() {
 	migrateCmd.Flags().StringVar(&workDir, "wd", filepath.Join(util.GetHomeDir(), ".s3migration"), "Working directory")
 	migrateCmd.Flags().IntVar(&concurrency, "concurrency", 10, "number of concurrent files to process concurrently during migration")
 	migrateCmd.Flags().BoolVar(&resume, "resume", false, "pass this option to resume migration from previous state")
-	migrateCmd.Flags().IntVar(&skip, "skip", 1, "0 --> Replace existing files; 1 --> Skip migration; 2 --> Duplicate")
+	migrateCmd.Flags().IntVar(&skip, "skip", 1, "0 --> Replace existing files; 1 --> Skip migration; 2 --> Duplicate with timestamp attached at the end of file name")
 	migrateCmd.Flags().IntVar(&retryCount, "retry", 3, "retry count for upload to dstorage")
 	migrateCmd.Flags().StringVar(&newerThanStr, "newer-than", "", "eg; 7d10h --> migrate objects that is newer than 7 days 10 hours")
 	migrateCmd.Flags().StringVar(&olderThanStr, "older-than", "", "eg; 7d10h --> migrate objects that is older than 7 days 10 hours")
