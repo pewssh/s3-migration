@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -162,7 +163,11 @@ var migrateCmd = &cobra.Command{
 				return err
 			}
 		} else {
-			if len(dir) > 0 {
+			if workDir == filepath.Join(util.GetHomeDir(), ".s3migration") {
+				for _, d := range dir {
+					os.RemoveAll(path.Join([]string{workDir, d.Name()}...))
+				}
+			} else if len(dir) > 0 {
 				return fmt.Errorf("working directory not empty")
 			}
 		}
