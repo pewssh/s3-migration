@@ -117,7 +117,7 @@ func (d *DStorageService) Upload(ctx context.Context, remotePath string, r io.Re
 		OperationType: opType,
 		FileMeta:      fileMeta,
 		Workdir:       d.workDir,
-		FileReader:    util.NewStreamReader(r),
+		FileReader:    util.NewFileReader(r),
 		RemotePath:    remotePath,
 		Opts:          options,
 	}

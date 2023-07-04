@@ -481,10 +481,10 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 			migration.migratedSize += uint64(op.uploadObj.Size)
 			migration.totalMigratedObjects++
 			migration.szCtMu.Unlock()
-			if closer, ok := op.Operation.FileReader.(*util.StreamReader); ok {
+			if closer, ok := op.Operation.FileReader.(*util.FileReader); ok {
 				_ = closer.Close()
 			}
-			_ = m.fs.Remove(op.uploadObj.LocalPath)
+			_ = migration.fs.Remove(op.uploadObj.LocalPath)
 		}
 	}()
 	fileOps := make([]sdk.OperationRequest, 0, len(ops))
@@ -495,6 +495,13 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 	}
 	err = util.Retry(3, time.Second*5, func() error {
 		err := processUpload(ctx, fileOps)
+		if err != nil {
+			for _, op := range ops {
+				if reader, ok := op.Operation.FileReader.(*util.FileReader); ok {
+					_, _ = reader.Seek(0, io.SeekStart)
+				}
+			}
+		}
 		return err
 	})
 	for _, op := range ops {
