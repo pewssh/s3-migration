@@ -118,7 +118,9 @@ func Retry(attempts int, sleep time.Duration, f func() error) (err error) {
 		if err = f(); err != nil {
 			zlogger.Logger.Error("retrying after error:", err)
 			time.Sleep(sleep)
-			continue
+			if shouldRetry(err.Error()) {
+				continue
+			}
 		}
 		return
 	}
@@ -149,4 +151,8 @@ func SignalTrap(sig ...os.Signal) <-chan struct{} {
 	}(trapCh)
 
 	return trapCh
+}
+
+func shouldRetry(errMsg string) bool {
+	return !strings.Contains(errMsg, "Max size reached")
 }

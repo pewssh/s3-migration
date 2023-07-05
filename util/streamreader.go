@@ -5,15 +5,15 @@ import (
 	"io"
 )
 
-func NewStreamReader(source io.Reader) *StreamReader {
-	return &StreamReader{source}
+func NewFileReader(source io.Reader) *FileReader {
+	return &FileReader{source}
 }
 
-type StreamReader struct {
+type FileReader struct {
 	io.Reader
 }
 
-func (r *StreamReader) Read(p []byte) (int, error) {
+func (r *FileReader) Read(p []byte) (int, error) {
 	bLen, err := io.ReadAtLeast(r.Reader, p, len(p))
 	if err != nil {
 		if errors.Is(err, io.ErrUnexpectedEOF) {
@@ -24,9 +24,16 @@ func (r *StreamReader) Read(p []byte) (int, error) {
 	return bLen, nil
 }
 
-func (r *StreamReader) Close() error {
+func (r *FileReader) Close() error {
 	if closer, ok := r.Reader.(io.Closer); ok {
 		return closer.Close()
 	}
 	return nil
+}
+
+func (r *FileReader) Seek(offset int64, whence int) (int64, error) {
+	if seeker, ok := r.Reader.(io.Seeker); ok {
+		return seeker.Seek(offset, whence)
+	}
+	return 0, errors.New("seek not supported")
 }
