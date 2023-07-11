@@ -231,8 +231,8 @@ func StartMigration() error {
 	}
 
 	migrationWorker := NewMigrationWorker(migration.workDir)
-	go migration.DownloadWorker(rootContext, migrationWorker)
-	go migration.UploadWorker(rootContext, migrationWorker)
+	migration.DownloadWorker(rootContext, migrationWorker)
+	// go migration.UploadWorker(rootContext, migrationWorker)
 	migration.UpdateStateFile(migrationWorker)
 	err := migrationWorker.GetMigrationError()
 	if err != nil {
@@ -247,21 +247,30 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 	defer migrator.CloseDownloadQueue()
 	objCh, errCh := migration.awsStore.ListFilesInBucket(rootContext)
 	wg := &sync.WaitGroup{}
+	ops := make([]MigrationOperation, 0, batchSize)
+	currentSize := 0
 	for obj := range objCh {
 		zlogger.Logger.Info("Downloading object: ", obj.Key)
 		migrator.PauseDownload()
 		if migrator.IsMigrationError() {
 			return
 		}
-		wg.Add(1)
+		if currentSize >= batchSize {
+			processOps := ops
+			// Here scope of improvement
+			wg.Wait()
+			m.processMultiOperation(ctx, processOps, migrator)
 
+			ops = nil
+		}
+		currentSize++
 		downloadObjMeta := &DownloadObjectMeta{
 			ObjectKey: obj.Key,
 			Size:      obj.Size,
 			DoneChan:  make(chan struct{}, 1),
 			ErrChan:   make(chan error, 1),
 		}
-
+		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			err := checkIsFileExist(ctx, downloadObjMeta)
@@ -276,15 +285,24 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 				migrator.DownloadDone(downloadObjMeta, "", nil)
 				return
 			}
-			migrator.DownloadStart(downloadObjMeta)
-			zlogger.Logger.Info("download start", downloadObjMeta.ObjectKey, downloadObjMeta.Size)
-			downloadPath, err := m.awsStore.DownloadToFile(ctx, downloadObjMeta.ObjectKey)
-			migrator.DownloadDone(downloadObjMeta, downloadPath, err)
-			migrator.SetMigrationError(err)
-			zlogger.Logger.Info("download done", downloadObjMeta.ObjectKey, downloadObjMeta.Size, err)
+			dataChan := make(chan *util.DataChan, 4)
+			streamWriter := util.NewStreamWriter(dataChan)
+			go m.processChunkDownload(ctx, streamWriter, migrator, downloadObjMeta)
+			op, err := processOperationForMemory(ctx, downloadObjMeta, streamWriter)
+			if err != nil {
+				// TODO, handle error gracefully
+			}
+			ops = append(ops, op)
 		}()
-		time.Sleep(1 * time.Second)
 	}
+	if currentSize > 0 {
+		wg.Wait()
+		processOps := ops
+		// Here scope of improvement
+		m.processMultiOperation(ctx, processOps, migrator)
+		ops = nil
+	}
+
 	wg.Wait()
 	err := <-errCh
 	if err != nil {
@@ -427,6 +445,36 @@ func processOperation(ctx context.Context, downloadObj *DownloadObjectMeta) (Mig
 	return op, nil
 }
 
+func processOperationForMemory(ctx context.Context, downloadObj *DownloadObjectMeta, r io.Reader) (MigrationOperation, error) {
+	remotePath := getRemotePath(downloadObj.ObjectKey)
+	var op MigrationOperation
+	//TODO: get correct mimetype
+	mimeType := "TODO"
+	var fileOperation sdk.OperationRequest
+	if downloadObj.IsFileAlreadyExist {
+		switch migration.skip {
+		case Replace:
+			zlogger.Logger.Info("Replacing object" + downloadObj.ObjectKey + " size " + strconv.FormatInt(downloadObj.Size, 10))
+			fileOperation = migration.zStore.Replace(ctx, remotePath, r, downloadObj.Size, mimeType)
+		case Duplicate:
+			zlogger.Logger.Info("Duplicating object" + downloadObj.ObjectKey + " size " + strconv.FormatInt(downloadObj.Size, 10))
+			fileOperation = migration.zStore.Duplicate(ctx, remotePath, r, downloadObj.Size, mimeType)
+		}
+	} else {
+		zlogger.Logger.Info("Uploading object: " + downloadObj.ObjectKey + " size " + strconv.FormatInt(downloadObj.Size, 10))
+		fileOperation = migration.zStore.Upload(ctx, remotePath, r, downloadObj.Size, mimeType, false)
+	}
+	op.Operation = fileOperation
+	op.uploadObj = &UploadObjectMeta{
+		ObjectKey: downloadObj.ObjectKey,
+		DoneChan:  make(chan struct{}, 1),
+		ErrChan:   make(chan error, 1),
+		Size:      downloadObj.Size,
+		LocalPath: downloadObj.LocalPath,
+	}
+	return op, nil
+}
+
 func processUpload(ctx context.Context, ops []sdk.OperationRequest) error {
 
 	err := migration.zStore.MultiUpload(ctx, ops)
@@ -502,4 +550,31 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 		zlogger.Logger.Info("upload done: ", op.uploadObj.ObjectKey, "size ", op.uploadObj.Size, err)
 	}
 	migrator.SetMigrationError(err)
+}
+
+
+func (m *Migration) processChunkDownload(ctx context.Context, sw *util.StreamWriter, migrator *MigrationWorker, downloadObjMeta *DownloadObjectMeta) {
+	// chunk download and pipe data
+
+	migrator.DownloadStart(downloadObjMeta)
+	offset := 0
+	chunkSize := sdk.DefaultChunkSize
+	for {
+		data, err := m.awsStore.DownloadToMemory(ctx, downloadObjMeta.ObjectKey, int64(offset), int64(chunkSize))
+		if err != nil {
+			migrator.DownloadDone(downloadObjMeta, "", err)
+			ctx.Err()
+			return
+		}
+		if len(data) > 0 {
+			sw.Write(data)
+		}
+		offset += chunkSize
+		// End of file
+		if len(data) < chunkSize {
+			break
+		}
+	}
+	migrator.DownloadDone(downloadObjMeta, "", nil)
+	close(sw.DataChan)
 }

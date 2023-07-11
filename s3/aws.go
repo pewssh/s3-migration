@@ -23,7 +23,7 @@ type AwsI interface {
 	GetFileContent(ctx context.Context, objectKey string) (*Object, error)
 	DeleteFile(ctx context.Context, objectKey string) error
 	DownloadToFile(ctx context.Context, objectKey string) (string, error)
-	DownloadToMemory(ctx context.Context, objectKey string) error
+	DownloadToMemory(ctx context.Context, objectKey string, offset int64, chunkSize int64) ([]byte, error)
 }
 
 type Object struct {
@@ -219,9 +219,6 @@ func (a *AwsClient) DeleteFile(ctx context.Context, objectKey string) error {
 }
 
 func (a *AwsClient) DownloadToFile(ctx context.Context, objectKey string) (string, error) {
-	defer func(startTime time.Time) {
-		fmt.Println("The time taken by download to file function", time.Since(startTime), " object key: ", objectKey)
-	}(time.Now())
 	params := &awsS3.GetObjectInput{
 		Bucket: aws.String(a.bucket),
 		Key:    aws.String(objectKey),
@@ -233,25 +230,23 @@ func (a *AwsClient) DownloadToFile(ctx context.Context, objectKey string) (strin
 	if err != nil {
 		return downloadPath, err
 	}
-	fmt.Println("Download path is: ", downloadPath)
+
 	defer f.Close()
 	_, err = a.downloader.Download(ctx, f, params)
 	return downloadPath, err
 }
 
-func (a *AwsClient) DownloadToMemory(ctx context.Context, objectKey string) error {
-	defer func(startTime time.Time) {
-		fmt.Println("The time taken by download in memory: ", objectKey, " is: ", time.Since(startTime))
-	}(time.Now())
+func (a *AwsClient) DownloadToMemory(ctx context.Context, objectKey string, offset int64, chunkSize int64) ([]byte, error) {
+	ran := fmt.Sprintf("bytes=%d-%d", offset, offset+chunkSize-1)
 	params := &awsS3.GetObjectInput{
 		Bucket: aws.String(a.bucket),
 		Key:    aws.String(objectKey),
+		Range:  &ran,
 	}
-	// TODO: Get size from awss3 and allocate exact size
-	maxSize := 1 * 1000 * 1024 * 1024
-	bytearray := make([]byte, maxSize)
+	maxSize := chunkSize
+	bytearray := make([]byte, 0, maxSize)
 	buffer := manager.NewWriteAtBuffer(bytearray)
 
 	_, err := a.downloader.Download(ctx, buffer, params)
-	return err
+	return buffer.Bytes(), err
 }
