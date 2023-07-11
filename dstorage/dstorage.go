@@ -88,10 +88,6 @@ func (d *DStorageService) GetFileMetaData(ctx context.Context, remotePath string
 
 func (d *DStorageService) MultiUpload(ctx context.Context, ops []sdk.OperationRequest) (err error) {
 	err = d.allocation.DoMultiOperation(ops)
-	// for _, op := range ops {
-	// 	f := op.FileReader.(util.File)
-	// 	f.Close()
-	// }
 	return err
 }
 
