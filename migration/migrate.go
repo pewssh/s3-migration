@@ -35,6 +35,7 @@ const (
 const (
 	batchSize    = 50
 	maxBatchSize = 1024 * 1024 * 1024 // 1GB
+	CHUNKSIZE    = 5 * 1024 * 1024
 )
 
 var migration Migration
@@ -231,7 +232,7 @@ func StartMigration() error {
 	}
 
 	migrationWorker := NewMigrationWorker(migration.workDir)
-	migration.DownloadWorker(rootContext, migrationWorker)
+	go migration.DownloadWorker(rootContext, migrationWorker)
 	// go migration.UploadWorker(rootContext, migrationWorker)
 	migration.UpdateStateFile(migrationWorker)
 	err := migrationWorker.GetMigrationError()
@@ -245,7 +246,7 @@ func StartMigration() error {
 
 func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorker) {
 	defer migrator.CloseDownloadQueue()
-	objCh, errCh := migration.awsStore.ListFilesInBucket(rootContext)
+	objCh, _ := migration.awsStore.ListFilesInBucket(rootContext)
 	wg := &sync.WaitGroup{}
 	ops := make([]MigrationOperation, 0, batchSize)
 	currentSize := 0
@@ -302,14 +303,8 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 		m.processMultiOperation(ctx, processOps, migrator)
 		ops = nil
 	}
-
 	wg.Wait()
-	err := <-errCh
-	if err != nil {
-		zlogger.Logger.Error(err)
-		migrator.SetMigrationError(err)
-	}
-
+	migrator.CloseUploadQueue()
 }
 
 func (m *Migration) UploadWorker(ctx context.Context, migrator *MigrationWorker) {
@@ -559,13 +554,13 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 	migrator.SetMigrationError(err)
 }
 
-
 func (m *Migration) processChunkDownload(ctx context.Context, sw *util.StreamWriter, migrator *MigrationWorker, downloadObjMeta *DownloadObjectMeta) {
 	// chunk download and pipe data
 
 	migrator.DownloadStart(downloadObjMeta)
 	offset := 0
-	chunkSize := sdk.DefaultChunkSize
+	chunkSize := CHUNKSIZE
+	acceptedChunkSize := sdk.DefaultChunkSize
 	for {
 		data, err := m.awsStore.DownloadToMemory(ctx, downloadObjMeta.ObjectKey, int64(offset), int64(chunkSize))
 		if err != nil {
@@ -574,7 +569,14 @@ func (m *Migration) processChunkDownload(ctx context.Context, sw *util.StreamWri
 			return
 		}
 		if len(data) > 0 {
-			sw.Write(data)
+			current := 0
+			for ; current < len(data); current += acceptedChunkSize {
+				high := current + acceptedChunkSize
+				if high > len(data) {
+					high = len(data)
+				}
+				sw.Write(data[current:high])
+			}
 		}
 		offset += chunkSize
 		// End of file
