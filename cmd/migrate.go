@@ -137,7 +137,7 @@ var migrateCmd = &cobra.Command{
 
 		var newerThanPtr *time.Time
 		if newerThanStr != "" {
-			timestampInt64, err := strconv.ParseInt(olderThanStr, 10, 64)
+			timestampInt64, err := strconv.ParseInt(newerThanStr, 10, 64)
 			if err != nil {
 				return err
 			}
