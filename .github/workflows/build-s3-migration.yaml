@@ -15,12 +15,12 @@ on:
 jobs:
   build-linux:
     name: Build-linux
-    runs-on: [self-hosted, docker-builds]
+    runs-on: [self-hosted, arc-runner]
     steps:
-      - name: Setup go 1.18
-        uses: actions/setup-go@v2
+      - name: Setup go 1.20
+        uses: actions/setup-go@v3
         with:
-          go-version: '1.18' # The Go version to download (if necessary) and use.
+          go-version: '1.20' # The Go version to download (if necessary) and use.
 
       - name: Checkout
         uses: actions/checkout@v2
