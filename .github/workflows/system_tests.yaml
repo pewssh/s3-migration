@@ -25,13 +25,16 @@ on:
         required: true
 jobs:
   system-tests:
-    uses: 0chain/actions/.github/workflows/manual_system_tests.yml@add/s3-migrt
+    uses: 0chain/actions/.github/workflows/manual_system_tests.yml@enable-s3mgrt-only-tests
     with:
       s3_migration_cli_branch: ${{ github.ref_name }}
       repo_snapshots_branch: ${{ github.event.inputs.repo_snapshots_branch }}
       test_file_filter: ${{ github.event.inputs.test_file_filter }}
       skip_tests: ${{ github.event.inputs.skip_tests }}
       run_smoke_tests: ${{ github.event.inputs.run_smoke_tests }}
+      run_api_system_tests: false
+      run_cli_system_tests: false
+      run_s3mgrt_system_tests: true
     secrets:
       SVC_ACCOUNT_SECRET: ${{ secrets.SVC_ACCOUNT_SECRET }}
       DEV1KC: ${{ secrets.DEV1KC }}
