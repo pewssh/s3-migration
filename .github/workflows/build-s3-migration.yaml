@@ -204,7 +204,7 @@ jobs:
           echo "CURRENT_BRANCH=$(echo $(([ -z '${{ github.head_ref }}' ] && echo  ${GITHUB_REF#refs/*/}) || echo '${{ github.head_ref }}'))" >> $GITHUB_ENV
 
       - name: "Set PR status as pending"
-        uses: 0chain/actions/set-pr-status@enable-s3mgrt-only-tests
+        uses: 0chain/actions/set-pr-status@master
         if: steps.findPr.outputs.number
         with:
           pr_number: ${{ steps.findPr.outputs.pr }}
@@ -216,7 +216,7 @@ jobs:
           github_token: ${{ github.token }}
 
       - name: "Deploy 0Chain"
-        uses: 0chain/actions/deploy-0chain@enable-s3mgrt-only-tests
+        uses: 0chain/actions/deploy-0chain@master
         with:
           repo_snapshots_branch: "<CURRENT BRANCH WITH FALLBACK TO CURRENT_SPRINT>"
           kube_config: ${{ secrets[format('DEV{0}KC', env.RUNNER_NUMBER)] }}
@@ -229,7 +229,7 @@ jobs:
           graphnode_ethereum_node_url: https://rpc.tenderly.co/fork/${{ secrets.TENDERLY_FORK_ID }}
 
       - name: "Run System tests"
-        uses: 0chain/actions/run-system-tests@enable-s3mgrt-only-tests
+        uses: 0chain/actions/run-system-tests@master
         with:
           repo_snapshots_branch: "<CURRENT BRANCH WITH FALLBACK TO CURRENT_SPRINT>"
           network: ${{ env.NETWORK_URL }}
@@ -251,7 +251,7 @@ jobs:
 
       - name: "Set PR status as ${{ job.status }}"
         if: ${{ (success() || failure()) && steps.findPr.outputs.number }}
-        uses: 0chain/actions/set-pr-status@enable-s3mgrt-only-tests
+        uses: 0chain/actions/set-pr-status@master
         with:
           pr_number: ${{ steps.findPr.outputs.pr }}
           description: "System tests with default config ${{ job.status }}"
