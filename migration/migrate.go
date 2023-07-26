@@ -33,7 +33,7 @@ const (
 )
 
 const (
-	batchSize    = 50
+	batchSize    = 25
 	maxBatchSize = 1024 * 1024 * 1024 // 1GB
 	CHUNKSIZE    = 50 * 1024 * 1024
 )
@@ -249,6 +249,7 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 	objCh, _ := migration.awsStore.ListFilesInBucket(rootContext)
 	wg := &sync.WaitGroup{}
 	ops := make([]MigrationOperation, 0, batchSize)
+	var opLock sync.Mutex
 	currentSize := 0
 	for obj := range objCh {
 		zlogger.Logger.Info("Downloading object: ", obj.Key)
@@ -270,6 +271,7 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 			Size:      obj.Size,
 			DoneChan:  make(chan struct{}, 1),
 			ErrChan:   make(chan error, 1),
+			mimeType:  obj.ContentType,
 		}
 		wg.Add(1)
 		go func() {
@@ -286,14 +288,16 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 				migrator.DownloadDone(downloadObjMeta, "", nil)
 				return
 			}
-			dataChan := make(chan *util.DataChan, 4)
+			dataChan := make(chan *util.DataChan, 100)
 			streamWriter := util.NewStreamWriter(dataChan)
 			go m.processChunkDownload(ctx, streamWriter, migrator, downloadObjMeta)
 			op, err := processOperationForMemory(ctx, downloadObjMeta, streamWriter)
 			if err != nil {
 				// TODO, handle error gracefully
 			}
+			opLock.Lock()
 			ops = append(ops, op)
+			opLock.Unlock()
 		}()
 	}
 	if currentSize > 0 {
@@ -443,8 +447,7 @@ func processOperation(ctx context.Context, downloadObj *DownloadObjectMeta) (Mig
 func processOperationForMemory(ctx context.Context, downloadObj *DownloadObjectMeta, r io.Reader) (MigrationOperation, error) {
 	remotePath := getRemotePath(downloadObj.ObjectKey)
 	var op MigrationOperation
-	//TODO: get correct mimetype
-	mimeType := "TODO"
+	mimeType := downloadObj.mimeType
 	var fileOperation sdk.OperationRequest
 	if downloadObj.IsFileAlreadyExist {
 		switch migration.skip {
@@ -510,7 +513,7 @@ func (m *Migration) UpdateStateFile(migrateHandler *MigrationWorker) {
 	}
 }
 
-func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOperation, migrator *MigrationWorker) {
+func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOperation, migrator *MigrationWorker) error {
 	var err error
 	defer func() {
 		for _, op := range ops {
@@ -552,6 +555,7 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 		zlogger.Logger.Info("upload done: ", op.uploadObj.ObjectKey, "size ", op.uploadObj.Size, err)
 	}
 	migrator.SetMigrationError(err)
+	return err
 }
 
 func (m *Migration) processChunkDownload(ctx context.Context, sw *util.StreamWriter, migrator *MigrationWorker, downloadObjMeta *DownloadObjectMeta) {
@@ -561,7 +565,13 @@ func (m *Migration) processChunkDownload(ctx context.Context, sw *util.StreamWri
 	offset := 0
 	chunkSize := CHUNKSIZE
 	acceptedChunkSize := sdk.DefaultChunkSize
+	defer close(sw.DataChan)
 	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 		data, err := m.awsStore.DownloadToMemory(ctx, downloadObjMeta.ObjectKey, int64(offset), int64(chunkSize))
 		if err != nil {
 			migrator.DownloadDone(downloadObjMeta, "", err)
@@ -585,5 +595,4 @@ func (m *Migration) processChunkDownload(ctx context.Context, sw *util.StreamWri
 		}
 	}
 	migrator.DownloadDone(downloadObjMeta, "", nil)
-	close(sw.DataChan)
 }
