@@ -246,7 +246,7 @@ func StartMigration() error {
 
 func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorker) {
 	defer migrator.CloseDownloadQueue()
-	objCh, _ := migration.awsStore.ListFilesInBucket(rootContext)
+	objCh, errCh := migration.awsStore.ListFilesInBucket(rootContext)
 	wg := &sync.WaitGroup{}
 	ops := make([]MigrationOperation, 0, batchSize)
 	var opLock sync.Mutex
@@ -308,6 +308,11 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 		ops = nil
 	}
 	wg.Wait()
+	err := <-errCh
+	if err != nil {
+		zlogger.Logger.Error(err)
+		migrator.SetMigrationError(err)
+	}
 	migrator.CloseUploadQueue()
 }
 
