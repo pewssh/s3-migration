@@ -251,18 +251,21 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 	ops := make([]MigrationOperation, 0, batchSize)
 	var opLock sync.Mutex
 	currentSize := 0
+	opCtx, opCtxCancel := context.WithCancel(ctx)
 	for obj := range objCh {
 		zlogger.Logger.Info("Downloading object: ", obj.Key)
 		migrator.PauseDownload()
 		if migrator.IsMigrationError() {
+			opCtxCancel()
 			return
 		}
 		if currentSize >= batchSize {
 			processOps := ops
 			// Here scope of improvement
 			wg.Wait()
-			m.processMultiOperation(ctx, processOps, migrator)
-
+			m.processMultiOperation(opCtx, processOps, migrator)
+			opCtxCancel()
+			opCtx, opCtxCancel = context.WithCancel(ctx)
 			ops = nil
 		}
 		currentSize++
@@ -290,11 +293,9 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 			}
 			dataChan := make(chan *util.DataChan, 100)
 			streamWriter := util.NewStreamWriter(dataChan)
-			go m.processChunkDownload(ctx, streamWriter, migrator, downloadObjMeta)
-			op, err := processOperationForMemory(ctx, downloadObjMeta, streamWriter)
-			if err != nil {
-				// TODO, handle error gracefully
-			}
+			go m.processChunkDownload(opCtx, streamWriter, migrator, downloadObjMeta)
+			// Always return nil as error
+			op, _ := processOperationForMemory(ctx, downloadObjMeta, streamWriter)
 			opLock.Lock()
 			ops = append(ops, op)
 			opLock.Unlock()
@@ -307,6 +308,7 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 		m.processMultiOperation(ctx, processOps, migrator)
 		ops = nil
 	}
+	opCtxCancel()
 	wg.Wait()
 	err := <-errCh
 	if err != nil {
