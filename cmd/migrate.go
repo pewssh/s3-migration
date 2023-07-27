@@ -137,19 +137,21 @@ var migrateCmd = &cobra.Command{
 
 		var newerThanPtr *time.Time
 		if newerThanStr != "" {
-			newerThan, err := getTimeFromDHString(newerThanStr)
+			timestampInt64, err := strconv.ParseInt(newerThanStr, 10, 64)
 			if err != nil {
 				return err
 			}
+			newerThan := time.Unix(timestampInt64, 0)
 			newerThanPtr = &newerThan
 		}
 
 		var olderThanPtr *time.Time
 		if olderThanStr != "" {
-			olderThan, err := getTimeFromDHString(olderThanStr)
+			timestampInt64, err := strconv.ParseInt(olderThanStr, 10, 64)
 			if err != nil {
 				return err
 			}
+			olderThan := time.Unix(timestampInt64, 0)
 			olderThanPtr = &olderThan
 		}
 
@@ -241,6 +243,7 @@ func getTimeFromDHString(s string) (t time.Time, err error) {
 
 	duration := time.Hour*24*time.Duration(days) + time.Hour*time.Duration(hours)
 	t = time.Now().Add(-duration)
+
 
 	return
 }
