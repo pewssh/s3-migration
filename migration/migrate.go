@@ -267,6 +267,7 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 			opCtxCancel()
 			opCtx, opCtxCancel = context.WithCancel(ctx)
 			ops = nil
+			currentSize = 0
 		}
 		currentSize++
 		downloadObjMeta := &DownloadObjectMeta{
@@ -291,7 +292,7 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 				migrator.DownloadDone(downloadObjMeta, "", nil)
 				return
 			}
-			dataChan := make(chan *util.DataChan, 100)
+			dataChan := make(chan *util.DataChan, 200)
 			streamWriter := util.NewStreamWriter(dataChan)
 			go m.processChunkDownload(opCtx, streamWriter, migrator, downloadObjMeta)
 			// Always return nil as error
