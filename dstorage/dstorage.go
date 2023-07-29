@@ -42,6 +42,7 @@ type DStoreI interface {
 	GetAvailableSpace() int64
 	GetTotalSpace() int64
 	UpdateAllocationDetails() error
+	GetChunkWriteSize() int64
 }
 
 type DStorageService struct {
@@ -197,4 +198,8 @@ func GetDStorageService(allocationID, migrateTo, duplicateSuffix, workDir string
 		duplicateSuffix: duplicateSuffix,
 		workDir:         workDir,
 	}, nil
+}
+
+func (d *DStorageService) GetChunkWriteSize() int64 {
+	return d.allocation.GetChunkReadSize(d.encrypt)
 }

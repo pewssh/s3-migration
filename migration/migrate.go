@@ -571,7 +571,7 @@ func (m *Migration) processChunkDownload(ctx context.Context, sw *util.StreamWri
 	migrator.DownloadStart(downloadObjMeta)
 	offset := 0
 	chunkSize := CHUNKSIZE
-	acceptedChunkSize := sdk.DefaultChunkSize
+	acceptedChunkSize := int(m.zStore.GetChunkWriteSize())
 	defer close(sw.DataChan)
 	for {
 		select {
