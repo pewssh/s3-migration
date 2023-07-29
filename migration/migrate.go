@@ -33,9 +33,9 @@ const (
 )
 
 const (
-	batchSize    = 25
+	batchSize    = 30
 	maxBatchSize = 1024 * 1024 * 1024 // 1GB
-	CHUNKSIZE    = 50 * 1024 * 1024
+	CHUNKSIZE    = 100 * 1024 * 1024
 )
 
 var migration Migration
