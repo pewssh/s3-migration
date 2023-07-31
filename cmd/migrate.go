@@ -221,8 +221,9 @@ var migrateCmd = &cobra.Command{
 		err = migration.StartMigration()
 		if err != nil {
 			return err
+		} else {
+			fmt.Println("Migration completed successfully")
 		}
-		fmt.Println("Migration completed successfully")
 		return nil
 	},
 }
@@ -243,7 +244,6 @@ func getTimeFromDHString(s string) (t time.Time, err error) {
 
 	duration := time.Hour*24*time.Duration(days) + time.Hour*time.Duration(hours)
 	t = time.Now().Add(-duration)
-
 
 	return
 }
