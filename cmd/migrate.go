@@ -37,6 +37,9 @@ var (
 	retryCount                 int
 	deleteSource               bool
 	workDir                    string
+	chunkSize                  int64
+	chunkNumber                int
+	batchSize                  int
 )
 
 // migrateCmd is the migrateFromS3 sub command to migrate whole objects from some buckets.
@@ -65,6 +68,9 @@ func init() {
 	migrateCmd.Flags().IntVar(&retryCount, "retry", 3, "retry count for upload to dstorage")
 	migrateCmd.Flags().StringVar(&newerThanStr, "newer-than", "", "eg; 7d10h --> migrate objects that is newer than 7 days 10 hours")
 	migrateCmd.Flags().StringVar(&olderThanStr, "older-than", "", "eg; 7d10h --> migrate objects that is older than 7 days 10 hours")
+	migrateCmd.Flags().Int64Var(&chunkSize, "chunk-size", 50*1024*1024, "chunk size in bytes")
+	migrateCmd.Flags().IntVar(&chunkNumber, "chunk-number", 1000, "number of chunks to upload")
+	migrateCmd.Flags().IntVar(&batchSize, "batch-size", 30, "number of files to upload in a batch")
 
 }
 
@@ -196,6 +202,16 @@ var migrateCmd = &cobra.Command{
 			return err
 		}
 
+		if chunkNumber == 0 {
+			chunkNumber = 1000
+		}
+		if chunkSize == 0 {
+			chunkSize = 50 * 1024 * 1024
+		}
+		if batchSize == 0 {
+			batchSize = 30
+		}
+
 		mConfig := migration.MigrationConfig{
 			AllocationID:    allocationId,
 			Region:          region,
@@ -213,6 +229,9 @@ var migrateCmd = &cobra.Command{
 			StartAfter:      startAfter,
 			StateFilePath:   stateFilePath,
 			WorkDir:         workDir,
+			ChunkSize:       chunkSize,
+			ChunkNumber:     chunkNumber,
+			BatchSize:       batchSize,
 		}
 
 		if err := migration.InitMigration(&mConfig); err != nil {
@@ -243,7 +262,6 @@ func getTimeFromDHString(s string) (t time.Time, err error) {
 
 	duration := time.Hour*24*time.Duration(days) + time.Hour*time.Duration(hours)
 	t = time.Now().Add(-duration)
-
 
 	return
 }

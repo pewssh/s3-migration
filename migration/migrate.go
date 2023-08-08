@@ -33,9 +33,7 @@ const (
 )
 
 const (
-	batchSize    = 30
 	maxBatchSize = 1024 * 1024 * 1024 // 1GB
-	CHUNKSIZE    = 100 * 1024 * 1024
 )
 
 var migration Migration
@@ -76,6 +74,8 @@ type Migration struct {
 	workDir       string
 	deleteSource  bool
 	bucket        string
+	chunkSize     int64
+	batchSize     int
 }
 
 type MigrationOperation struct {
@@ -121,6 +121,7 @@ func InitMigration(mConfig *MigrationConfig) error {
 		mConfig.DuplicateSuffix,
 		mConfig.WorkDir,
 		mConfig.Encrypt,
+		mConfig.ChunkNumber,
 	)
 	if err != nil {
 		zlogger.Logger.Error(err)
@@ -161,6 +162,8 @@ func InitMigration(mConfig *MigrationConfig) error {
 		workDir:       mConfig.WorkDir,
 		bucket:        mConfig.Bucket,
 		fs:            util.Fs,
+		chunkSize:     mConfig.ChunkSize,
+		batchSize:     mConfig.BatchSize,
 	}
 
 	rootContext, rootContextCancel = context.WithCancel(context.Background())
@@ -248,7 +251,7 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 	defer migrator.CloseDownloadQueue()
 	objCh, errCh := migration.awsStore.ListFilesInBucket(rootContext)
 	wg := &sync.WaitGroup{}
-	ops := make([]MigrationOperation, 0, batchSize)
+	ops := make([]MigrationOperation, 0, m.batchSize)
 	var opLock sync.Mutex
 	currentSize := 0
 	opCtx, opCtxCancel := context.WithCancel(ctx)
@@ -259,7 +262,7 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 			opCtxCancel()
 			return
 		}
-		if currentSize >= batchSize {
+		if currentSize >= m.batchSize {
 			processOps := ops
 			// Here scope of improvement
 			wg.Wait()
@@ -326,7 +329,7 @@ func (m *Migration) UploadWorker(ctx context.Context, migrator *MigrationWorker)
 
 	downloadQueue := migrator.GetDownloadQueue()
 	wg := &sync.WaitGroup{}
-	ops := make([]MigrationOperation, 0, batchSize)
+	ops := make([]MigrationOperation, 0, m.batchSize)
 	totalSize := int64(0)
 	for d := range downloadQueue {
 		zlogger.Logger.Info("Uploading object: ", d.ObjectKey)
@@ -362,7 +365,7 @@ func (m *Migration) UploadWorker(ctx context.Context, migrator *MigrationWorker)
 		op.uploadObj = uploadObj
 		ops = append(ops, op)
 		totalSize += downloadObj.Size
-		if len(ops) >= batchSize || totalSize >= maxBatchSize {
+		if len(ops) >= m.batchSize || totalSize >= maxBatchSize {
 			processOps := ops
 			ops = nil
 			wg.Add(1)
@@ -571,7 +574,7 @@ func (m *Migration) processChunkDownload(ctx context.Context, sw *util.StreamWri
 
 	migrator.DownloadStart(downloadObjMeta)
 	offset := 0
-	chunkSize := CHUNKSIZE
+	chunkSize := int(m.chunkSize)
 	acceptedChunkSize := int(m.zStore.GetChunkWriteSize())
 	defer close(sw.DataChan)
 	for {
