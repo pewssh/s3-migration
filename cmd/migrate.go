@@ -203,7 +203,7 @@ var migrateCmd = &cobra.Command{
 		}
 
 		if chunkNumber == 0 {
-			chunkNumber = 1000
+			chunkNumber = 500
 		}
 		if chunkSize == 0 {
 			chunkSize = 50 * 1024 * 1024
