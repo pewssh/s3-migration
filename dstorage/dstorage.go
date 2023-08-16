@@ -42,6 +42,7 @@ type DStoreI interface {
 	GetAvailableSpace() int64
 	GetTotalSpace() int64
 	UpdateAllocationDetails() error
+	GetChunkWriteSize() int64
 }
 
 type DStorageService struct {
@@ -53,12 +54,12 @@ type DStorageService struct {
 	//then duplicate path should be /path/to/remote/file{duplicateSuffix}.txt
 	duplicateSuffix string
 	workDir         string
+	chunkNumer      int
 }
 
 const (
 	GetRefRetryWaitTime = 500 * time.Millisecond
 	GetRefRetryCount    = 2
-	ChunkNumber         = 1000
 )
 
 func (d *DStorageService) GetFileMetaData(ctx context.Context, remotePath string) (*sdk.ORef, error) {
@@ -110,7 +111,7 @@ func (d *DStorageService) Upload(ctx context.Context, remotePath string, r io.Re
 
 	options := []sdk.ChunkedUploadOption{
 		sdk.WithEncrypt(d.encrypt),
-		sdk.WithChunkNumber(ChunkNumber),
+		sdk.WithChunkNumber(d.chunkNumer),
 	}
 
 	op := sdk.OperationRequest{
@@ -171,7 +172,7 @@ func (d *DStorageService) GetTotalSpace() int64 {
 	return d.allocation.Size
 }
 
-func GetDStorageService(allocationID, migrateTo, duplicateSuffix, workDir string, encrypt bool) (*DStorageService, error) {
+func GetDStorageService(allocationID, migrateTo, duplicateSuffix, workDir string, encrypt bool, chunkNumber int) (*DStorageService, error) {
 	allocation, err := sdk.GetAllocation(allocationID)
 
 	if err != nil {
@@ -196,5 +197,10 @@ func GetDStorageService(allocationID, migrateTo, duplicateSuffix, workDir string
 		migrateTo:       migrateTo,
 		duplicateSuffix: duplicateSuffix,
 		workDir:         workDir,
+		chunkNumer:      chunkNumber,
 	}, nil
+}
+
+func (d *DStorageService) GetChunkWriteSize() int64 {
+	return d.allocation.GetChunkReadSize(d.encrypt)
 }
