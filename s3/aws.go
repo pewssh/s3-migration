@@ -23,6 +23,7 @@ type AwsI interface {
 	GetFileContent(ctx context.Context, objectKey string) (*Object, error)
 	DeleteFile(ctx context.Context, objectKey string) error
 	DownloadToFile(ctx context.Context, objectKey string) (string, error)
+	DownloadToMemory(ctx context.Context, objectKey string, offset int64, chunkSize int64) ([]byte, error)
 }
 
 type Object struct {
@@ -33,8 +34,9 @@ type Object struct {
 
 // ObjectMeta key: object key, size: size of object in bytes
 type ObjectMeta struct {
-	Key  string
-	Size int64
+	Key         string
+	Size        int64
+	ContentType string
 }
 
 type AwsClient struct {
@@ -185,8 +187,12 @@ func (a *AwsClient) ListFilesInBucket(ctx context.Context) (<-chan *ObjectMeta, 
 				if a.olderThan != nil && creationTime.After(*a.olderThan) {
 					continue
 				}
-
-				objectMetaChan <- &ObjectMeta{Key: aws.ToString(obj.Key), Size: obj.Size}
+				contentType, err := a.GetContentType(ctx, aws.ToString(obj.Key))
+				if err != nil {
+					errChan <- err
+					return
+				}
+				objectMetaChan <- &ObjectMeta{Key: aws.ToString(obj.Key), Size: obj.Size, ContentType: contentType}
 			}
 		}
 	}()
@@ -206,6 +212,14 @@ func (a *AwsClient) GetFileContent(ctx context.Context, objectKey string) (*Obje
 	}, nil
 }
 
+func (a *AwsClient) GetContentType(ctx context.Context, objectKey string) (string, error) {
+	out, err := a.client.HeadObject(ctx, &awsS3.HeadObjectInput{Bucket: aws.String(a.bucket), Key: aws.String(objectKey)})
+	if err != nil {
+		return "", err
+	}
+	return aws.ToString(out.ContentType), nil
+}
+
 func (a *AwsClient) DeleteFile(ctx context.Context, objectKey string) error {
 	if !a.deleteSource {
 		return nil
@@ -222,7 +236,6 @@ func (a *AwsClient) DownloadToFile(ctx context.Context, objectKey string) (strin
 		Bucket: aws.String(a.bucket),
 		Key:    aws.String(objectKey),
 	}
-
 	fileName := encryption.Hash(objectKey)
 	downloadPath := filepath.Join(a.workDir, fileName)
 	f, err := os.Create(downloadPath)
@@ -233,4 +246,19 @@ func (a *AwsClient) DownloadToFile(ctx context.Context, objectKey string) (strin
 	defer f.Close()
 	_, err = a.downloader.Download(ctx, f, params)
 	return downloadPath, err
+}
+
+func (a *AwsClient) DownloadToMemory(ctx context.Context, objectKey string, offset int64, chunkSize int64) ([]byte, error) {
+	ran := fmt.Sprintf("bytes=%d-%d", offset, offset+chunkSize-1)
+	params := &awsS3.GetObjectInput{
+		Bucket: aws.String(a.bucket),
+		Key:    aws.String(objectKey),
+		Range:  &ran,
+	}
+	maxSize := chunkSize
+	bytearray := make([]byte, 0, maxSize)
+	buffer := manager.NewWriteAtBuffer(bytearray)
+
+	n, err := a.downloader.Download(ctx, buffer, params)
+	return buffer.Bytes()[:n], err
 }

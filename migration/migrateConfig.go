@@ -19,4 +19,7 @@ type MigrationConfig struct {
 	StartAfter      string
 	StateFilePath   string
 	WorkDir         string
+	ChunkSize       int64
+	ChunkNumber     int
+	BatchSize       int
 }
