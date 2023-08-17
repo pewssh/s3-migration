@@ -393,7 +393,7 @@ func getShortObjectKey(objectKey string) string {
 	const maxLength = 90
 
 	if len(objectKey) > maxLength {
-		//get the last 100 characters of the object key.
+		//get the last maxLength characters of the object key.
 		shortKey := objectKey[len(objectKey)-maxLength:]
 		return shortKey
 	}
