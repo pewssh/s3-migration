@@ -359,8 +359,23 @@ func (m *Migration) UploadWorker(ctx context.Context, migrator *MigrationWorker)
 	wg.Wait()
 }
 
+func getShortObjectKey(objectKey string) string {
+	//max length to which objectKey would be trimmed to
+	//reserving 10 chars for duplicate suffixes.
+	const maxLength = 90
+
+	if len(objectKey) > maxLength {
+		//get the last 100 characters of the object key.
+		shortKey := objectKey[len(objectKey)-maxLength:]
+		return shortKey
+	}
+
+	return objectKey
+
+}
+
 func getRemotePath(objectKey string) string {
-	return filepath.Join(migration.migrateTo, migration.bucket, objectKey)
+	return filepath.Join(migration.migrateTo, migration.bucket, getShortObjectKey(objectKey))
 }
 
 func checkIsFileExist(ctx context.Context, downloadObj *DownloadObjectMeta) error {
@@ -490,7 +505,7 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 	fileOps := make([]sdk.OperationRequest, 0, len(ops))
 	for _, op := range ops {
 		migrator.UploadStart(op.uploadObj)
-		zlogger.Logger.Info("upload start: ", op.uploadObj.ObjectKey, "size: ", op.uploadObj.Size)
+		zlogger.Logger.Info("upload start: ", op.uploadObj.ObjectKey, " size: ", op.uploadObj.Size)
 		fileOps = append(fileOps, op.Operation)
 	}
 	err = util.Retry(3, time.Second*5, func() error {
