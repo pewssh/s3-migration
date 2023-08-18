@@ -42,7 +42,7 @@ jobs:
           elif  [[ "${{github.base_ref}}" == "staging" || "${{github.ref}}" == "refs/heads/staging" ]]; then
             echo "TAG=v0.0.0-staging" >> $GITHUB_ENV
           else
-            echo "TAG=$(echo ${GITHUB_REF#refs/tags/})" >> $GITHUB_ENV
+            echo "TAG=v0.0.0-${{github.base_ref}}" >> $GITHUB_ENV
           fi
 
       - name: add dependencies
