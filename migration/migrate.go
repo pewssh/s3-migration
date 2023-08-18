@@ -2,6 +2,8 @@ package migration
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -387,23 +389,29 @@ func (m *Migration) UploadWorker(ctx context.Context, migrator *MigrationWorker)
 	wg.Wait()
 }
 
-func getShortObjectKey(objectKey string) string {
-	//max length to which objectKey would be trimmed to
-	//reserving 10 chars for duplicate suffixes.
-	const maxLength = 90
+func getUniqueShortObjKey(objectKey string) string {
+	//Max length to which objectKey would be trimmed to.
+	const maxLength = 100
 
 	if len(objectKey) > maxLength {
-		//get the last maxLength characters of the object key.
-		shortKey := objectKey[len(objectKey)-maxLength:]
+		// Generate a SHA-1 hash of the object key
+		hash := sha1.New()
+		hash.Write([]byte(objectKey))
+		hashSum := hash.Sum(nil)
+
+		// Convert the hash to a hexadecimal string
+		hashString := hex.EncodeToString(hashSum)
+
+		// Combine the first 10 characters of the hash with a truncated object key
+		shortKey := fmt.Sprintf("%s_%s", hashString[:10], objectKey[11+len(objectKey)-maxLength:])
 		return shortKey
 	}
 
 	return objectKey
-
 }
 
 func getRemotePath(objectKey string) string {
-	return filepath.Join(migration.migrateTo, migration.bucket, getShortObjectKey(objectKey))
+	return filepath.Join(migration.migrateTo, migration.bucket, getUniqueShortObjKey(objectKey))
 }
 
 func checkIsFileExist(ctx context.Context, downloadObj *DownloadObjectMeta) error {
