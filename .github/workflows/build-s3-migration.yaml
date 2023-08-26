@@ -54,17 +54,17 @@ jobs:
         run: |
           docker run --rm -v $PWD:/s3mgrt --workdir=/s3mgrt golang:1.20.4 make build
 
-      - name: Zip release
-        run: tar -czvf s3mgrt-linux.tar.gz ./s3mgrt
+      # - name: Zip release
+      #   run: tar -czvf s3mgrt-linux.tar.gz ./s3mgrt
 
-      - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: s3mgrt-linux.tar.gz
-          tag: ${{ github.ref }}
-          overwrite: true
-          file_glob: true
+      # - name: Upload binaries to release
+      #   uses: svenstaro/upload-release-action@v2
+      #   with:
+      #     repo_token: ${{ secrets.GITHUB_TOKEN }}
+      #     file: s3mgrt-linux.tar.gz
+      #     tag: ${{ env.TAG }}
+      #     overwrite: true
+      #     file_glob: true
 
       - name: Install AWS
         if: github.ref == 'refs/heads/staging'
@@ -120,18 +120,18 @@ jobs:
       - name: Install
         run: make build
 
-      - name: Zip Release
-        run: |
-          copy s3mgrt s3mgrt.exe
-          7z a s3mgrt-windows.zip s3mgrt.exe
-      - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: s3mgrt-windows.zip
-          tag: ${{ github.ref }}
-          overwrite: true
-          file_glob: true
+      # - name: Zip Release
+      #   run: |
+      #     copy s3mgrt s3mgrt.exe
+      #     7z a s3mgrt-windows.zip s3mgrt.exe
+      # - name: Upload binaries to release
+      #   uses: svenstaro/upload-release-action@v2
+      #   with:
+      #     repo_token: ${{ secrets.GITHUB_TOKEN }}
+      #     file: s3mgrt-windows.zip
+      #     tag: ${{ env.TAG }}
+      #     overwrite: true
+      #     file_glob: true
 
       - name: 'Upload Artifact'
         uses: actions/upload-artifact@v2
@@ -166,17 +166,17 @@ jobs:
       - name: Install
         run: make build
 
-      - name: Zip release
-        run: tar -czvf s3mgrt-macos.tar.gz ./s3mgrt
+      # - name: Zip release
+      #   run: tar -czvf s3mgrt-macos.tar.gz ./s3mgrt
 
-      - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: s3mgrt-macos.tar.gz
-          tag: ${{ github.ref }}
-          overwrite: true
-          file_glob: true
+      # - name: Upload binaries to release
+      #   uses: svenstaro/upload-release-action@v2
+      #   with:
+      #     repo_token: ${{ secrets.GITHUB_TOKEN }}
+      #     file: s3mgrt-macos.tar.gz
+      #     tag: ${{ env.TAG }}
+      #     overwrite: true
+      #     file_glob: true
 
       - name: 'Upload Artifact'
         uses: actions/upload-artifact@v2
