@@ -42,7 +42,7 @@ jobs:
           elif  [[ "${{github.base_ref}}" == "staging" || "${{github.ref}}" == "refs/heads/staging" ]]; then
             echo "TAG=v0.0.0-staging" >> $GITHUB_ENV
           else
-            echo "TAG=$(echo ${GITHUB_REF#refs/tags/})" >> $GITHUB_ENV
+            echo "TAG=v0.0.0-${{github.base_ref}}" >> $GITHUB_ENV
           fi
 
       - name: add dependencies
@@ -54,17 +54,17 @@ jobs:
         run: |
           docker run --rm -v $PWD:/s3mgrt --workdir=/s3mgrt golang:1.20.4 make build
 
-      - name: Zip release
-        run: tar -czvf s3mgrt-linux.tar.gz ./s3mgrt
+      # - name: Zip release
+      #   run: tar -czvf s3mgrt-linux.tar.gz ./s3mgrt
 
-      - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: s3mgrt-linux.tar.gz
-          tag: ${{ env.TAG }}
-          overwrite: true
-          file_glob: true
+      # - name: Upload binaries to release
+      #   uses: svenstaro/upload-release-action@v2
+      #   with:
+      #     repo_token: ${{ secrets.GITHUB_TOKEN }}
+      #     file: s3mgrt-linux.tar.gz
+      #     tag: ${{ env.TAG }}
+      #     overwrite: true
+      #     file_glob: true
 
       - name: Install AWS
         if: github.ref == 'refs/heads/staging'
@@ -114,24 +114,24 @@ jobs:
           } ElseIf ( "${{github.base_ref}}" -eq "staging" -OR "${{github.ref}}" -eq "refs/heads/staging" ){
             echo "TAG=v0.0.0-staging" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
           } ELSE {
-            echo "TAG=${{github.ref}}" | %{$_ -replace('refs/tags/', '')} | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
+            echo "TAG=v0.0.0-${{github.base_ref}}" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
           }
 
       - name: Install
         run: make build
 
-      - name: Zip Release
-        run: |
-          copy s3mgrt s3mgrt.exe
-          7z a s3mgrt-windows.zip s3mgrt.exe
-      - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: s3mgrt-windows.zip
-          tag: ${{ env.TAG }}
-          overwrite: true
-          file_glob: true
+      # - name: Zip Release
+      #   run: |
+      #     copy s3mgrt s3mgrt.exe
+      #     7z a s3mgrt-windows.zip s3mgrt.exe
+      # - name: Upload binaries to release
+      #   uses: svenstaro/upload-release-action@v2
+      #   with:
+      #     repo_token: ${{ secrets.GITHUB_TOKEN }}
+      #     file: s3mgrt-windows.zip
+      #     tag: ${{ env.TAG }}
+      #     overwrite: true
+      #     file_glob: true
 
       - name: 'Upload Artifact'
         uses: actions/upload-artifact@v2
@@ -161,22 +161,22 @@ jobs:
           elif  [[ "${{github.base_ref}}" == "staging" || "${{github.ref}}" == "refs/heads/staging" ]]; then
             echo "TAG=v0.0.0-staging" >> $GITHUB_ENV
           else
-            echo "TAG=$(echo ${GITHUB_REF#refs/tags/})" >> $GITHUB_ENV
+            echo "TAG=v0.0.0-${{github.base_ref}}" >> $GITHUB_ENV
           fi
       - name: Install
         run: make build
 
-      - name: Zip release
-        run: tar -czvf s3mgrt-macos.tar.gz ./s3mgrt
+      # - name: Zip release
+      #   run: tar -czvf s3mgrt-macos.tar.gz ./s3mgrt
 
-      - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: s3mgrt-macos.tar.gz
-          tag: ${{ env.TAG }}
-          overwrite: true
-          file_glob: true
+      # - name: Upload binaries to release
+      #   uses: svenstaro/upload-release-action@v2
+      #   with:
+      #     repo_token: ${{ secrets.GITHUB_TOKEN }}
+      #     file: s3mgrt-macos.tar.gz
+      #     tag: ${{ env.TAG }}
+      #     overwrite: true
+      #     file_glob: true
 
       - name: 'Upload Artifact'
         uses: actions/upload-artifact@v2
