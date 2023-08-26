@@ -24,7 +24,7 @@ import (
 
 const Batch = 10
 const (
-	Replace   = iota //Will replace existing file
+	Replace   = iota // Will replace existing file
 	Skip             // Will skip migration if file already exists
 	Duplicate        // Will add _copy prefix and uploads the file
 )
@@ -64,10 +64,10 @@ type Migration struct {
 	skip       int
 	retryCount int
 
-	//Number of goroutines to run. So at most concurrency * Batch goroutines will run. i.e. for bucket level and object level
+	// Number of goroutines to run. So at most concurrency * Batch goroutines will run. i.e. for bucket level and object level
 	concurrency int
 
-	szCtMu               sync.Mutex //size and count mutex; used to update migratedSize and totalMigratedObjects
+	szCtMu               sync.Mutex // size and count mutex; used to update migratedSize and totalMigratedObjects
 	migratedSize         uint64
 	totalMigratedObjects uint64
 
@@ -237,8 +237,16 @@ func StartMigration() error {
 	}
 
 	migrationWorker := NewMigrationWorker(migration.workDir)
-	go migration.DownloadWorker(rootContext, migrationWorker)
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		migration.DownloadWorker(rootContext, migrationWorker)
+	}()
 	// go migration.UploadWorker(rootContext, migrationWorker)
+	wg.Wait()
+
 	migration.UpdateStateFile(migrationWorker)
 	err := migrationWorker.GetMigrationError()
 	if err != nil {
@@ -586,7 +594,7 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 	})
 	for _, op := range ops {
 		migrator.UploadDone(op.uploadObj, err)
-		zlogger.Logger.Info("upload done: ", op.uploadObj.ObjectKey, "size ", op.uploadObj.Size, err)
+		zlogger.Logger.Info("upload done: ", op.uploadObj.ObjectKey, " size ", op.uploadObj.Size, err)
 	}
 	migrator.SetMigrationError(err)
 	return err
