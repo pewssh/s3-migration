@@ -398,8 +398,10 @@ func (m *Migration) UploadWorker(ctx context.Context, migrator *MigrationWorker)
 }
 
 func getUniqueShortObjKey(objectKey string) string {
-	//Max length to which objectKey would be trimmed to.
-	const maxLength = 100
+	// Max length to which objectKey would be trimmed to.
+	// Keeping this less than 100 chars to prevent longer name in case of uploading duplicate
+	// files with `_copy` suffixes.
+	const maxLength = 90
 
 	if len(objectKey) > maxLength {
 		// Generate a SHA-1 hash of the object key
@@ -497,7 +499,7 @@ func processOperationForMemory(ctx context.Context, downloadObj *DownloadObjectM
 			zlogger.Logger.Info("Replacing object" + downloadObj.ObjectKey + " size " + strconv.FormatInt(downloadObj.Size, 10))
 			fileOperation = migration.zStore.Replace(ctx, remotePath, r, downloadObj.Size, mimeType)
 		case Duplicate:
-			zlogger.Logger.Info("Duplicating object" + downloadObj.ObjectKey + " size " + strconv.FormatInt(downloadObj.Size, 10))
+			zlogger.Logger.Info("Duplicating object " + downloadObj.ObjectKey + " size " + strconv.FormatInt(downloadObj.Size, 10))
 			fileOperation = migration.zStore.Duplicate(ctx, remotePath, r, downloadObj.Size, mimeType)
 		}
 	} else {
