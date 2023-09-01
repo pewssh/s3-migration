@@ -2,6 +2,8 @@ package migration
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -22,7 +24,7 @@ import (
 
 const Batch = 10
 const (
-	Replace   = iota //Will replace existing file
+	Replace   = iota // Will replace existing file
 	Skip             // Will skip migration if file already exists
 	Duplicate        // Will add _copy prefix and uploads the file
 )
@@ -62,10 +64,10 @@ type Migration struct {
 	skip       int
 	retryCount int
 
-	//Number of goroutines to run. So at most concurrency * Batch goroutines will run. i.e. for bucket level and object level
+	// Number of goroutines to run. So at most concurrency * Batch goroutines will run. i.e. for bucket level and object level
 	concurrency int
 
-	szCtMu               sync.Mutex //size and count mutex; used to update migratedSize and totalMigratedObjects
+	szCtMu               sync.Mutex // size and count mutex; used to update migratedSize and totalMigratedObjects
 	migratedSize         uint64
 	totalMigratedObjects uint64
 
@@ -235,8 +237,16 @@ func StartMigration() error {
 	}
 
 	migrationWorker := NewMigrationWorker(migration.workDir)
-	go migration.DownloadWorker(rootContext, migrationWorker)
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		migration.DownloadWorker(rootContext, migrationWorker)
+	}()
 	// go migration.UploadWorker(rootContext, migrationWorker)
+	wg.Wait()
+
 	migration.UpdateStateFile(migrationWorker)
 	err := migrationWorker.GetMigrationError()
 	if err != nil {
@@ -387,8 +397,31 @@ func (m *Migration) UploadWorker(ctx context.Context, migrator *MigrationWorker)
 	wg.Wait()
 }
 
+func getUniqueShortObjKey(objectKey string) string {
+	// Max length to which objectKey would be trimmed to.
+	// Keeping this less than 100 chars to prevent longer name in case of uploading duplicate
+	// files with `_copy` suffixes.
+	const maxLength = 90
+
+	if len(objectKey) > maxLength {
+		// Generate a SHA-1 hash of the object key
+		hash := sha1.New()
+		hash.Write([]byte(objectKey))
+		hashSum := hash.Sum(nil)
+
+		// Convert the hash to a hexadecimal string
+		hashString := hex.EncodeToString(hashSum)
+
+		// Combine the first 10 characters of the hash with a truncated object key
+		shortKey := fmt.Sprintf("%s_%s", hashString[:10], objectKey[11+len(objectKey)-maxLength:])
+		return shortKey
+	}
+
+	return objectKey
+}
+
 func getRemotePath(objectKey string) string {
-	return filepath.Join(migration.migrateTo, migration.bucket, objectKey)
+	return filepath.Join(migration.migrateTo, migration.bucket, getUniqueShortObjKey(objectKey))
 }
 
 func checkIsFileExist(ctx context.Context, downloadObj *DownloadObjectMeta) error {
@@ -466,7 +499,7 @@ func processOperationForMemory(ctx context.Context, downloadObj *DownloadObjectM
 			zlogger.Logger.Info("Replacing object" + downloadObj.ObjectKey + " size " + strconv.FormatInt(downloadObj.Size, 10))
 			fileOperation = migration.zStore.Replace(ctx, remotePath, r, downloadObj.Size, mimeType)
 		case Duplicate:
-			zlogger.Logger.Info("Duplicating object" + downloadObj.ObjectKey + " size " + strconv.FormatInt(downloadObj.Size, 10))
+			zlogger.Logger.Info("Duplicating object " + downloadObj.ObjectKey + " size " + strconv.FormatInt(downloadObj.Size, 10))
 			fileOperation = migration.zStore.Duplicate(ctx, remotePath, r, downloadObj.Size, mimeType)
 		}
 	} else {
@@ -547,7 +580,7 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 	fileOps := make([]sdk.OperationRequest, 0, len(ops))
 	for _, op := range ops {
 		migrator.UploadStart(op.uploadObj)
-		zlogger.Logger.Info("upload start: ", op.uploadObj.ObjectKey, "size: ", op.uploadObj.Size)
+		zlogger.Logger.Info("upload start: ", op.uploadObj.ObjectKey, " size: ", op.uploadObj.Size)
 		fileOps = append(fileOps, op.Operation)
 	}
 	err = util.Retry(3, time.Second*5, func() error {
@@ -563,7 +596,7 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 	})
 	for _, op := range ops {
 		migrator.UploadDone(op.uploadObj, err)
-		zlogger.Logger.Info("upload done: ", op.uploadObj.ObjectKey, "size ", op.uploadObj.Size, err)
+		zlogger.Logger.Info("upload done: ", op.uploadObj.ObjectKey, " size ", op.uploadObj.Size, err)
 	}
 	migrator.SetMigrationError(err)
 	return err
