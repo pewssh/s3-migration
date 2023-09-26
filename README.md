@@ -1,4 +1,4 @@
-# s3-migration - a CLI for migrating AWS S3 bucket to Züs dStorage 
+# s3-migration - a CLI tool for migrating AWS S3 bucket to Züs dStorage 
 
 
 s3-migration is a command line interface (CLI) tool that helps migrate files from S3 bucket to Züs dStorage.
@@ -44,7 +44,7 @@ When you run the `./s3migration` command in terminal with no arguments inside th
 
 ### Global Flags
 
-Global Flags are parameters in s3igration that can be used with any command to override the default configuration supports the following global parameters.
+Global Flags are parameters in s3migration that can be used with any command to override the default configuration supports the following global parameters.
 
 | Flags                      | Description                                                  | Usage                                             |
 | -------------------------- | ------------------------------------------------------------ | ------------------------------------------------- |
@@ -60,7 +60,7 @@ Global Flags are parameters in s3igration that can be used with any command to o
 ## Migrate Command
 
 `migrate` command is used to migrate files from s3 buckets to some remote directory(default is /) by using aws-s3-sdk and 0chain gosdk. All the objects from the bucket will be migrated.
-However users can specify some prefix to migrate only the files with those prefix. Also if there is name conflict within dStorage file and bucket file use can
+However users can specify some prefix to migrate only the files with those prefix. Also if there is name conflict within dStorage file and bucket file users can
 specify whether to skip, replace or duplicate them. Migration state is maintained in some file so user can also resume migration operation if some error had
 occurred in previous migration session. User can also specify whether to delete migrated file. Note the defaults.
 
