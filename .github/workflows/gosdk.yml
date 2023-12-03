@@ -31,7 +31,7 @@ jobs:
       - name: Upgrade 0Chain GoSDK
         run: |
           echo "BRANCH=$(echo ${{github.event.inputs.gosdk}} | sed 's/\//-/g')" >> $GITHUB_ENV
-          ./build_mocks.sh
+          
           go get github.com/0chain/gosdk@${{github.event.inputs.gosdk}}
           go mod tidy
 
