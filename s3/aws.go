@@ -23,7 +23,7 @@ type AwsI interface {
 	GetFileContent(ctx context.Context, objectKey string) (*Object, error)
 	DeleteFile(ctx context.Context, objectKey string) error
 	DownloadToFile(ctx context.Context, objectKey string) (string, error)
-	DownloadToMemory(ctx context.Context, objectKey string, offset int64, chunkSize int64) ([]byte, error)
+	DownloadToMemory(ctx context.Context, objectKey string, offset int64, chunkSize, objectSize int64) ([]byte, error)
 }
 
 type Object struct {
@@ -248,8 +248,12 @@ func (a *AwsClient) DownloadToFile(ctx context.Context, objectKey string) (strin
 	return downloadPath, err
 }
 
-func (a *AwsClient) DownloadToMemory(ctx context.Context, objectKey string, offset int64, chunkSize int64) ([]byte, error) {
-	ran := fmt.Sprintf("bytes=%d-%d", offset, offset+chunkSize-1)
+func (a *AwsClient) DownloadToMemory(ctx context.Context, objectKey string, offset int64, chunkSize, objectSize int64) ([]byte, error) {
+	limit := offset + chunkSize - 1
+	if offset+chunkSize-1 > objectSize {
+		limit = objectSize
+	}
+	ran := fmt.Sprintf("bytes=%d-%d", offset, limit)
 	params := &awsS3.GetObjectInput{
 		Bucket: aws.String(a.bucket),
 		Key:    aws.String(objectKey),
