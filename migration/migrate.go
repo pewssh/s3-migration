@@ -616,7 +616,7 @@ func (m *Migration) processChunkDownload(ctx context.Context, sw *util.StreamWri
 			return
 		default:
 		}
-		data, err := m.awsStore.DownloadToMemory(ctx, downloadObjMeta.ObjectKey, int64(offset), int64(chunkSize))
+		data, err := m.awsStore.DownloadToMemory(ctx, downloadObjMeta.ObjectKey, int64(offset), int64(chunkSize), downloadObjMeta.Size)
 		if err != nil {
 			migrator.DownloadDone(downloadObjMeta, "", err)
 			ctx.Err()
