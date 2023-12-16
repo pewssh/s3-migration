@@ -129,7 +129,7 @@ func InitMigration(mConfig *MigrationConfig) error {
 		zlogger.Logger.Error(err)
 		return err
 	}
-	mConfig.ChunkSize = dStorageService.GetChunkWriteSize()
+	mConfig.ChunkSize = int64(mConfig.ChunkNumber) * dStorageService.GetChunkWriteSize()
 	zlogger.Logger.Info("Getting aws storage service")
 	awsStorageService, err := s3.GetAwsClient(
 		mConfig.Bucket,
@@ -616,7 +616,7 @@ func (m *Migration) processChunkDownload(ctx context.Context, sw *util.StreamWri
 			return
 		default:
 		}
-		data, err := m.awsStore.DownloadToMemory(ctx, downloadObjMeta.ObjectKey, int64(offset), int64(chunkSize))
+		data, err := m.awsStore.DownloadToMemory(ctx, downloadObjMeta.ObjectKey, int64(offset), int64(chunkSize), downloadObjMeta.Size)
 		if err != nil {
 			migrator.DownloadDone(downloadObjMeta, "", err)
 			ctx.Err()
