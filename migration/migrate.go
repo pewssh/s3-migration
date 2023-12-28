@@ -568,10 +568,12 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 					dsFileHandler.Write([]byte(op.uploadObj.ObjectKey + "\n"))
 				}
 			}
-			migration.szCtMu.Lock()
-			migration.migratedSize += uint64(op.uploadObj.Size)
-			migration.totalMigratedObjects++
-			migration.szCtMu.Unlock()
+			if err == nil {
+				migration.szCtMu.Lock()
+				migration.migratedSize += uint64(op.uploadObj.Size)
+				migration.totalMigratedObjects++
+				migration.szCtMu.Unlock()
+			}
 			if closer, ok := op.Operation.FileReader.(*util.FileReader); ok {
 				_ = closer.Close()
 			}
