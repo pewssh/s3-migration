@@ -124,6 +124,7 @@ func InitMigration(mConfig *MigrationConfig) error {
 		mConfig.WorkDir,
 		mConfig.Encrypt,
 		mConfig.ChunkNumber,
+		mConfig.BatchSize,
 	)
 	if err != nil {
 		zlogger.Logger.Error(err)
@@ -583,7 +584,7 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 		zlogger.Logger.Info("upload start: ", op.uploadObj.ObjectKey, " size: ", op.uploadObj.Size)
 		fileOps = append(fileOps, op.Operation)
 	}
-	err = util.Retry(3, time.Second*5, func() error {
+	err = util.Retry(1, time.Second*5, func() error {
 		err := processUpload(ctx, fileOps)
 		if err != nil {
 			for _, op := range ops {
