@@ -240,15 +240,17 @@ func StartMigration() error {
 	migrationWorker := NewMigrationWorker(migration.workDir)
 
 	wg := sync.WaitGroup{}
-	wg.Add(1)
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		migration.DownloadWorker(rootContext, migrationWorker)
 	}()
 	// go migration.UploadWorker(rootContext, migrationWorker)
+	go func() {
+		migration.UpdateStateFile(migrationWorker)
+		wg.Done()
+	}()
 	wg.Wait()
-
-	migration.UpdateStateFile(migrationWorker)
 	err := migrationWorker.GetMigrationError()
 	if err != nil {
 		zlogger.Logger.Error("Error while migration, err", err)
