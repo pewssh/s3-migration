@@ -274,10 +274,13 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 			return
 		}
 		if currentSize >= m.batchSize {
-			processOps := ops
 			// Here scope of improvement
 			wg.Wait()
-			m.processMultiOperation(opCtx, processOps, migrator)
+			if len(ops) > 0 {
+				m.processMultiOperation(opCtx, ops, migrator)
+			} else {
+				zlogger.Logger.Info("No operation to process")
+			}
 			opCtxCancel()
 			opCtx, opCtxCancel = context.WithCancel(ctx)
 			ops = nil
@@ -296,7 +299,7 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 			defer wg.Done()
 			err := checkIsFileExist(ctx, downloadObjMeta)
 			if err != nil {
-				zlogger.Logger.Error(err)
+				zlogger.Logger.Error("check file error: ", err)
 				migrator.SetMigrationError(err)
 				return
 			}
