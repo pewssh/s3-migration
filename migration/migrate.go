@@ -124,6 +124,7 @@ func InitMigration(mConfig *MigrationConfig) error {
 		mConfig.WorkDir,
 		mConfig.Encrypt,
 		mConfig.ChunkNumber,
+		mConfig.BatchSize,
 	)
 	if err != nil {
 		zlogger.Logger.Error(err)
@@ -239,15 +240,17 @@ func StartMigration() error {
 	migrationWorker := NewMigrationWorker(migration.workDir)
 
 	wg := sync.WaitGroup{}
-	wg.Add(1)
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		migration.DownloadWorker(rootContext, migrationWorker)
 	}()
 	// go migration.UploadWorker(rootContext, migrationWorker)
+	go func() {
+		migration.UpdateStateFile(migrationWorker)
+		wg.Done()
+	}()
 	wg.Wait()
-
-	migration.UpdateStateFile(migrationWorker)
 	err := migrationWorker.GetMigrationError()
 	if err != nil {
 		zlogger.Logger.Error("Error while migration, err", err)
@@ -273,10 +276,13 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 			return
 		}
 		if currentSize >= m.batchSize {
-			processOps := ops
 			// Here scope of improvement
 			wg.Wait()
-			m.processMultiOperation(opCtx, processOps, migrator)
+			if len(ops) > 0 {
+				m.processMultiOperation(opCtx, ops, migrator)
+			} else {
+				zlogger.Logger.Info("No operation to process")
+			}
 			opCtxCancel()
 			opCtx, opCtxCancel = context.WithCancel(ctx)
 			ops = nil
@@ -295,7 +301,7 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 			defer wg.Done()
 			err := checkIsFileExist(ctx, downloadObjMeta)
 			if err != nil {
-				zlogger.Logger.Error(err)
+				zlogger.Logger.Error("check file error: ", err)
 				migrator.SetMigrationError(err)
 				return
 			}
@@ -567,10 +573,12 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 					dsFileHandler.Write([]byte(op.uploadObj.ObjectKey + "\n"))
 				}
 			}
-			migration.szCtMu.Lock()
-			migration.migratedSize += uint64(op.uploadObj.Size)
-			migration.totalMigratedObjects++
-			migration.szCtMu.Unlock()
+			if err == nil {
+				migration.szCtMu.Lock()
+				migration.migratedSize += uint64(op.uploadObj.Size)
+				migration.totalMigratedObjects++
+				migration.szCtMu.Unlock()
+			}
 			if closer, ok := op.Operation.FileReader.(*util.FileReader); ok {
 				_ = closer.Close()
 			}
@@ -583,7 +591,7 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 		zlogger.Logger.Info("upload start: ", op.uploadObj.ObjectKey, " size: ", op.uploadObj.Size)
 		fileOps = append(fileOps, op.Operation)
 	}
-	err = util.Retry(3, time.Second*5, func() error {
+	err = util.Retry(1, time.Second*5, func() error {
 		err := processUpload(ctx, fileOps)
 		if err != nil {
 			for _, op := range ops {
