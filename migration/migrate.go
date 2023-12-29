@@ -85,29 +85,16 @@ type MigrationOperation struct {
 	uploadObj *UploadObjectMeta
 }
 
-func updateTotalObjects(awsStorageService *s3.AwsClient, wd string) error {
+func updateTotalObjects(totalObjChan chan struct{}, wd string) error {
 	f, err := os.Create(filepath.Join(wd, "files.total"))
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-
 	var totalFiles int
-	objCh, errCh := awsStorageService.ListFilesInBucket(context.Background())
 
-L1:
-	for {
-		select {
-		case _, ok := <-objCh:
-			if !ok {
-				break L1
-			}
-			totalFiles++
-		case err = <-errCh:
-			if err != nil {
-				return err
-			}
-		}
+	for range totalObjChan {
+		totalFiles++
 	}
 
 	_, err = f.WriteString(strconv.Itoa(totalFiles))
@@ -142,12 +129,6 @@ func InitMigration(mConfig *MigrationConfig) error {
 		mConfig.StartAfter,
 		mConfig.WorkDir,
 	)
-	if err != nil {
-		zlogger.Logger.Error(err)
-		return err
-	}
-
-	err = updateTotalObjects(awsStorageService, mConfig.WorkDir)
 	if err != nil {
 		zlogger.Logger.Error(err)
 		return err
@@ -262,6 +243,9 @@ func StartMigration() error {
 
 func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorker) {
 	defer migrator.CloseDownloadQueue()
+	totalObjChan := make(chan struct{}, 100)
+	defer close(totalObjChan)
+	go updateTotalObjects(totalObjChan, m.workDir)
 	objCh, errCh := migration.awsStore.ListFilesInBucket(rootContext)
 	wg := &sync.WaitGroup{}
 	ops := make([]MigrationOperation, 0, m.batchSize)
@@ -315,6 +299,7 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 			streamWriter := util.NewStreamWriter(dataChan)
 			go m.processChunkDownload(opCtx, streamWriter, migrator, downloadObjMeta)
 			// Always return nil as error
+			totalObjChan <- struct{}{}
 			op, _ := processOperationForMemory(ctx, downloadObjMeta, streamWriter)
 			opLock.Lock()
 			ops = append(ops, op)
