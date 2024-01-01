@@ -174,7 +174,7 @@ func (d *DStorageService) GetTotalSpace() int64 {
 
 func GetDStorageService(allocationID, migrateTo, duplicateSuffix, workDir string, encrypt bool, chunkNumber, batchSize int) (*DStorageService, error) {
 	allocation, err := sdk.GetAllocation(allocationID)
-	sdk.BatchSize = batchSize
+	sdk.MultiOpBatchSize = batchSize
 	if err != nil {
 		return nil, err
 	}

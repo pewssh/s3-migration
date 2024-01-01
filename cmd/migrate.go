@@ -70,7 +70,7 @@ func init() {
 	migrateCmd.Flags().StringVar(&olderThanStr, "older-than", "", "eg; 7d10h --> migrate objects that is older than 7 days 10 hours")
 	migrateCmd.Flags().Int64Var(&chunkSize, "chunk-size", 50*1024*1024, "chunk size in bytes")
 	migrateCmd.Flags().IntVar(&chunkNumber, "chunk-number", 250, "number of chunks to upload")
-	migrateCmd.Flags().IntVar(&batchSize, "batch-size", 30, "number of files to upload in a batch")
+	migrateCmd.Flags().IntVar(&batchSize, "batch-size", 20, "number of files to upload in a batch")
 
 }
 
