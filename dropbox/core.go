@@ -12,8 +12,8 @@ import (
 )
 
 type DropboxI interface {
-	ListFiles(ctx context.Context) ([]*ObjectMeta, error)
-	ListFilesInFolder(ctx context.Context) ([]*ObjectMeta, error)
+    ListFiles(ctx context.Context) ([]*ObjectMeta, error)
+    ListFilesInFolder(ctx context.Context, folderName string) ([]*ObjectMeta, error)
 	GetFileContent(ctx context.Context, filePath string) (*Object, error)
 	DeleteFile(ctx context.Context, filePath string) error
 	DownloadToFile(ctx context.Context, filePath string) (string, error)
