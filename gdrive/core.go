@@ -129,27 +129,33 @@ func (g *GoogleDriveClient) DownloadToFile(ctx context.Context, fileID, destinat
 }
 
 func (g *GoogleDriveClient) DownloadToMemory(ctx context.Context, fileID string, offset int64, chunkSize, fileSize int64) ([]byte, error) {
-	resp, err := g.service.Files.Get(fileID).Download()
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+    limit := offset + chunkSize - 1
+    if limit > fileSize {
+        limit = fileSize
+    }
 
-	if offset < 0 || offset >= fileSize || chunkSize <= 0 {
-		return nil, fmt.Errorf("invalid offset or chunk size")
-	}
+    rng := fmt.Sprintf("bytes=%d-%d", offset, limit)
 
-	endPos := offset + chunkSize - 1
-	if endPos >= fileSize {
-		endPos = fileSize - 1
-	}
+    req := g.service.Files.Get(fileID)
 
-	data := make([]byte, endPos-offset+1)
-	n, err := io.ReadFull(resp.Body, data)
-	if err != nil && err != io.ErrUnexpectedEOF {
-		return nil, err
-	}
-	data = data[:n]
+    req.Header().Set("Range", rng)
 
-	return data, nil
+    resp, err := req.Download()
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+
+    data := make([]byte, chunkSize)
+    n, err := io.ReadFull(resp.Body, data)
+
+    if err != nil && err != io.ErrUnexpectedEOF {
+        return nil, err
+    }
+
+    if int64(n) < chunkSize && fileSize != chunkSize {
+        data = data[:n]
+    }
+
+    return data, nil
 }

@@ -155,25 +155,33 @@ func (d *DropboxClient) DownloadToFile(ctx context.Context, filePath string) (st
 }
 
 func (d *DropboxClient) DownloadToMemory(ctx context.Context, objectKey string, offset int64, chunkSize, objectSize int64) ([]byte, error) {
-	arg := files.NewDownloadArg(objectKey)
-	_, content, err := d.dropboxFiles.Download(arg)
-	if err != nil {
-		return nil, err
-	}
-	defer content.Close()
+    limit := offset + chunkSize - 1
+    if limit > objectSize {
+        limit = objectSize
+    }
 
-	if _, err := io.CopyN(io.Discard, content, offset); err != nil {
-		return nil, err
-	}
+    rng := fmt.Sprintf("bytes=%d-%d", offset, limit)
 
-	data := make([]byte, chunkSize)
-	n, err := io.ReadFull(content, data)
-	if err != nil && err != io.ErrUnexpectedEOF {
-		return nil, err
-	}
-	if int64(n) < chunkSize && objectSize != chunkSize {
-		data = data[:n]
-	}
+    arg := files.NewDownloadArg(objectKey)
 
-	return data, nil
+    arg.ExtraHeaders = map[string]string{"Range": rng}
+
+    _, content, err := d.dropboxFiles.Download(arg)
+    if err != nil {
+        return nil, err
+    }
+    defer content.Close()
+
+    data := make([]byte, chunkSize)
+    n, err := io.ReadFull(content, data)
+
+    if err != nil && err != io.ErrUnexpectedEOF {
+        return nil, err
+    }
+
+    if int64(n) < chunkSize && objectSize != chunkSize {
+        data = data[:n]
+    }
+
+    return data, nil
 }
