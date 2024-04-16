@@ -3,8 +3,9 @@ package dropbox
 import (
 	"context"
 	"fmt"
-	"log"
 	"testing"
+
+	zlogger "github.com/0chain/s3migration/logger"
 )
 
 var (
@@ -38,38 +39,38 @@ though we know with our hearts that she lies.
 func TestDropboxClient_ListFiles(t *testing.T) {
 	client, err := GetDropboxClient(dropboxAccessToken)
 	if err != nil {
-		log.Printf("Failed to create Dropbox client: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("Failed to create Dropbox client: %v", err))
 		return
 	}
 
 	ctx := context.Background()
 	files, err := client.ListFiles(ctx)
 	if err != nil {
-		log.Printf("Error while listing files: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("Error while listing files: %v", err))
 		return
 	}
 
 	for _, file := range files {
-		log.Printf("File: %s, Name: %s, Size: %d bytes", file.Path, file.ContentType, file.Size)
+		zlogger.Logger.Info(fmt.Sprintf("File: %s, Name: %s, Size: %d bytes", file.Path, file.ContentType, file.Size))
 	}
 }
 
 func TestDropboxClient_GetFileContent(t *testing.T) {
 	client, err := GetDropboxClient(dropboxAccessToken)
 	if err != nil {
-		log.Printf("Failed to create Dropbox client: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("Failed to create Dropbox client: %v", err))
 	}
 
 	ctx := context.Background()
 	filePath := testFilePath
 	obj, err := client.GetFileContent(ctx, filePath)
 	if err != nil {
-		log.Printf("Error while getting file content: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("Error while getting file content: %v", err))
 		return
 	}
 	defer obj.Body.Close()
 
-	log.Printf("File content type: %s, Length: %d", obj.ContentType, obj.ContentLength)
+	zlogger.Logger.Info(fmt.Sprintf("File content type: %s, Length: %d", obj.ContentType, obj.ContentLength))
 
 	if (obj.Body == nil) || (obj.ContentLength == 0) {
 		fmt.Println("Empty file content")
@@ -80,17 +81,17 @@ func TestDropboxClient_GetFileContent(t *testing.T) {
 	n, err := obj.Body.Read(buf)
 
 	if err != nil && err.Error() != "EOF" {
-		log.Printf("Error while reading file content: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("Error while reading file content: %v", err))
 		return
 	}
 
-	log.Printf("File content: %s", string(buf[:n]))
+	zlogger.Logger.Info(fmt.Sprintf("File content: %s", string(buf[:n])))
 }
 
 func TestDropboxClient_DeleteFile(t *testing.T) {
 	client, err := GetDropboxClient(dropboxAccessToken)
 	if err != nil {
-		log.Printf("Failed to create Dropbox client: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("Failed to create Dropbox client: %v", err))
 		return
 	}
 
@@ -98,16 +99,16 @@ func TestDropboxClient_DeleteFile(t *testing.T) {
 	filePath := testFilePath
 	err = client.DeleteFile(ctx, filePath)
 	if err != nil {
-		log.Printf("Error while deleting file: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("Error while deleting file: %v", err))
 		return
 	}
-	log.Printf("File %s deleted successfully", filePath)
+	zlogger.Logger.Info(fmt.Sprintf("File %s deleted successfully", filePath))
 }
 
 func TestDropboxClient_DownloadToFile(t *testing.T) {
 	client, err := GetDropboxClient(dropboxAccessToken)
 	if err != nil {
-		log.Printf("Failed to create Dropbox client: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("Failed to create Dropbox client: %v", err))
 		return
 	}
 
@@ -115,16 +116,16 @@ func TestDropboxClient_DownloadToFile(t *testing.T) {
 	filePath := testFilePath
 	downloadedPath, err := client.DownloadToFile(ctx, filePath)
 	if err != nil {
-		log.Printf("Error while downloading file: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("Error while downloading file: %v", err))
 		return
 	}
-	log.Printf("Downloaded to: %s", downloadedPath)
+	zlogger.Logger.Info(fmt.Sprintf("Downloaded to: %s", downloadedPath))
 }
 
 func TestDropboxClient_DownloadToMemory(t *testing.T) {
 	client, err := GetDropboxClient(dropboxAccessToken)
 	if err != nil {
-		log.Printf("Failed to create Dropbox client: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("Failed to create Dropbox client: %v", err))
 		return
 	}
 
@@ -139,9 +140,9 @@ func TestDropboxClient_DownloadToMemory(t *testing.T) {
 
 	data, err := client.DownloadToMemory(ctx, filePath, offset, chunkSize, objectSize)
 	if err != nil {
-		log.Printf("Error while downloading file: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("Error while downloading file: %v", err))
 		return
 	}
 
-	log.Printf("Downloaded data: %s", data)
+	zlogger.Logger.Info(fmt.Sprintf("Downloaded data: %s", data))
 }

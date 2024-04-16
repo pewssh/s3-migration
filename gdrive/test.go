@@ -2,8 +2,10 @@ package gdrive
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"testing"
+
+	zlogger "github.com/0chain/s3migration/logger"
 )
 
 var (
@@ -40,26 +42,26 @@ though we know with our hearts that she lies.
 func TestGoogleDriveClient_ListFiles(t *testing.T) {
 	client, err := NewGoogleDriveClient(driveAccessToken)
 	if err != nil {
-		log.Printf("err while creating Google Drive client: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("err while creating Google Drive client: %v", err))
 		return
 	}
 
 	ctx := context.Background()
 	files, err := client.ListFiles(ctx)
 	if err != nil {
-		log.Printf("err while list files: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("err while list files: %v", err))
 		return
 	}
 
 	for _, file := range files {
-		log.Printf("file: %s, name: %s, size: %d bytes", file.ID, file.Name, file.Size)
+		zlogger.Logger.Info(fmt.Sprintf("file: %s, name: %s, size: %d bytes", file.ID, file.Name, file.Size))
 	}
 }
 
 func TestGoogleDriveClient_GetFileContent(t *testing.T) {
 	client, err := NewGoogleDriveClient(driveAccessToken)
 	if err != nil {
-		log.Printf("Failed to creating Google Drive client: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("Failed to creating Google Drive client: %v", err))
 		return
 	}
 
@@ -68,32 +70,32 @@ func TestGoogleDriveClient_GetFileContent(t *testing.T) {
 	obj, err := client.GetFileContent(ctx, fileID, true)
 
 	if err != nil {
-		log.Printf("err while getting file content: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("err while getting file content: %v", err))
 		return
 	}
 
 	defer obj.Body.Close()
 
-	log.Printf("file content type: %s, length: %d", obj.ContentType, obj.ContentLength)
+	zlogger.Logger.Info(fmt.Sprintf("file content type: %s, length: %d", obj.ContentType, obj.ContentLength))
 
 	if (obj.Body == nil) || (obj.ContentLength == 0) {
-		log.Printf("empty file content")
+		zlogger.Logger.Info("empty file content")
 		return
 	}
 
 	buf := make([]byte, obj.ContentLength)
 	n, err := obj.Body.Read(buf)
 	if err != nil {
-		log.Printf("err while read file content: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("err while read file content: %v", err))
 		return
 	}
-	log.Printf("read data: %s", buf[:n])
+	zlogger.Logger.Info(fmt.Sprintf("read data: %s", buf[:n]))
 }
 
 func TestGoogleDriveClient_DeleteFile(t *testing.T) {
 	client, err := NewGoogleDriveClient(driveAccessToken)
 	if err != nil {
-		log.Printf("err while creating Google Drive client: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("err while creating Google Drive client: %v", err))
 		return
 	}
 
@@ -101,16 +103,16 @@ func TestGoogleDriveClient_DeleteFile(t *testing.T) {
 	fileID := testFileID
 	err = client.DeleteFile(ctx, fileID)
 	if err != nil {
-		log.Printf("err while delete file: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("err while delete file: %v", err))
 		return
 	}
-	log.Printf("file: %s deleted successfully", fileID)
+	zlogger.Logger.Error(fmt.Sprintf("file: %s deleted successfully", fileID))
 }
 
 func TestGoogleDriveClient_DownloadToFile(t *testing.T) {
 	client, err := NewGoogleDriveClient(driveAccessToken)
 	if err != nil {
-		log.Printf("err while creating Google Drive client: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("err while creating Google Drive client: %v", err))
 	}
 
 	ctx := context.Background()
@@ -118,16 +120,16 @@ func TestGoogleDriveClient_DownloadToFile(t *testing.T) {
 	destinationPath := "./downloaded_file.txt"
 	err = client.DownloadToFile(ctx, fileID, destinationPath)
 	if err != nil {
-		log.Printf("err while downloading file: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("err while downloading file: %v", err))
 		return
 	}
-	log.Printf("downloaded to: %s", destinationPath)
+	zlogger.Logger.Info(fmt.Sprintf("downloaded to: %s", destinationPath))
 }
 
 func TestGoogleDriveClient_DownloadToMemory(t *testing.T) {
 	client, err := NewGoogleDriveClient(driveAccessToken)
 	if err != nil {
-		log.Printf("err while creating Google Drive client: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("err while creating Google Drive client: %v", err))
 	}
 
 	ctx := context.Background()
@@ -142,16 +144,16 @@ func TestGoogleDriveClient_DownloadToMemory(t *testing.T) {
 	fileSize := int64(626)
 
 	if err != nil {
-		log.Printf("err while getting file size: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("err while getting file size: %v", err))
 		return
 	}
 
 	data, err := client.DownloadToMemory(ctx, fileID, offset, chunkSize, fileSize)
 
 	if err != nil {
-		log.Printf("err while downloading file: %v", err)
+		zlogger.Logger.Error(fmt.Sprintf("err while downloading file: %v", err))
 		return
 	}
 
-	log.Printf("downloaded data: %s", data)
+	zlogger.Logger.Info(fmt.Sprintf("downloaded data: %s", data))
 }

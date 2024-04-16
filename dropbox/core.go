@@ -2,6 +2,7 @@ package dropbox
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"mime"
 	"os"
