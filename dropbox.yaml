@@ -1,0 +1,3 @@
+dropbox_access_token: "ACCESSTOKEN"
+folder_name: "folderName" # Folder to migrate from
+prefix: "prefix"

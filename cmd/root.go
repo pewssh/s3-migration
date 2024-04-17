@@ -49,6 +49,7 @@ var (
 		to communicate with s3.`,
 	}
 
+
 	// clientWallet zcncrypto.Wallet
 )
 var clientConfig string
