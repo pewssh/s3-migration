@@ -40,6 +40,8 @@ var (
 	chunkSize                  int64
 	chunkNumber                int
 	batchSize                  int
+	source                     string
+	accessToken                string // if source is google drive or dropbox
 )
 
 // migrateCmd is the migrateFromS3 sub command to migrate whole objects from some buckets.
@@ -71,7 +73,8 @@ func init() {
 	migrateCmd.Flags().Int64Var(&chunkSize, "chunk-size", 50*1024*1024, "chunk size in bytes")
 	migrateCmd.Flags().IntVar(&chunkNumber, "chunk-number", 250, "number of chunks to upload")
 	migrateCmd.Flags().IntVar(&batchSize, "batch-size", 20, "number of files to upload in a batch")
-
+	migrateCmd.Flags().StringVar(&source, "source", "s3", "s3 or google_drive or dropbox")
+	migrateCmd.Flags().StringVar(&accessToken, "access-token", "", "access token for google drive or dropbox")
 }
 
 var migrateCmd = &cobra.Command{
@@ -127,6 +130,10 @@ var migrateCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
+		}
+
+		if source == "" {
+			source = "s3"
 		}
 
 		if skip < 0 || skip > 2 {
@@ -232,6 +239,9 @@ var migrateCmd = &cobra.Command{
 			ChunkSize:       chunkSize,
 			ChunkNumber:     chunkNumber,
 			BatchSize:       batchSize,
+
+			Source:      source,
+			AccessToken: accessToken,
 		}
 
 		if err := migration.InitMigration(&mConfig); err != nil {

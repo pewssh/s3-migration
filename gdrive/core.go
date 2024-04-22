@@ -5,41 +5,21 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
+	"path"
 
 	zlogger "github.com/0chain/s3migration/logger"
+	T "github.com/0chain/s3migration/types"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
 )
 
-type GoogleDriveI interface {
-	ListFiles(ctx context.Context) ([]*ObjectMeta, error)
-	GetFileContent(ctx context.Context, fileID string, keepOpen bool) (*Object, error)
-	DeleteFile(ctx context.Context, fileID string) error
-	DownloadToFile(ctx context.Context, fileID, destinationPath string) error
-	DownloadToMemory(ctx context.Context, fileID string, offset int64, chunkSize, fileSize int64) ([]byte, error)
-}
-
-type Object struct {
-	Body          io.ReadCloser
-	ContentType   string
-	ContentLength int64
-}
-
-type ObjectMeta struct {
-	ID           string
-	Name         string
-	Size         int64
-	ContentType  string
-	LastModified string
-}
-
 type GoogleDriveClient struct {
 	service *drive.Service
+	workDir string
 }
 
-func NewGoogleDriveClient(accessToken string) (*GoogleDriveClient, error) {
+func NewGoogleDriveClient(accessToken string, workDir string) (*GoogleDriveClient, error) {
 	ctx := context.Background()
 
 	tokenSource := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: accessToken})
@@ -53,44 +33,86 @@ func NewGoogleDriveClient(accessToken string) (*GoogleDriveClient, error) {
 
 	return &GoogleDriveClient{
 		service: service,
+		workDir: workDir,
 	}, nil
 }
 
-func (g *GoogleDriveClient) ListFiles(ctx context.Context) ([]*ObjectMeta, error) {
-	files, err := g.service.Files.List().Context(ctx).Do()
-	if err != nil {
-		return nil, err
-	}
+func (g *GoogleDriveClient) ListFiles(ctx context.Context) (<-chan *T.ObjectMeta, <-chan error) {
+	objectChan := make(chan *T.ObjectMeta)
+	errChan := make(chan error)
 
-	var objects []*ObjectMeta
-	for _, file := range files.Files {
-		if strings.HasSuffix(file.Name, "/") { // Skip dirs
-			continue
+	go func() {
+		defer func() {
+			close(objectChan)
+			close(errChan)
+		}()
+
+		filesReq := g.service.Files.List().Context(ctx)
+
+		filesReq.Q("trashed=false")
+
+		filesReq.Fields(
+			"id, mimeType, size",
+		)
+
+		filesReq.Pages(ctx, func(page *drive.FileList) error {
+			return nil
+		})
+
+		filesReq.PageSize(100)
+
+		files, err := filesReq.Do()
+		if err != nil {
+			errChan <- err
+			return
 		}
 
-		objects = append(objects, &ObjectMeta{
-			ID:           file.Id,
-			Name:         file.Name,
-			Size:         file.Size,
-			ContentType:  file.MimeType,
-			LastModified: file.ModifiedTime,
-		})
-	}
+		for _, file := range files.Files {
+			objectChan <- &T.ObjectMeta{
+				Key:         file.Id,
+				Size:        file.Size,
+				ContentType: file.MimeType,
+			}
+		}
 
-	return objects, nil
+		nextPgToken := files.NextPageToken
+
+		for nextPgToken != "" {
+			filesReq.PageToken(nextPgToken)
+
+			files, err := filesReq.Do()
+
+			if err != nil {
+				errChan <- err
+				return
+			}
+
+			for _, file := range files.Files {
+				objectChan <- &T.ObjectMeta{
+					Key:         file.Id,
+					Size:        file.Size,
+					ContentType: file.MimeType,
+				}
+			}
+
+			nextPgToken = files.NextPageToken
+		}
+	}()
+
+	return objectChan, errChan
 }
 
-func (g *GoogleDriveClient) GetFileContent(ctx context.Context, fileID string, keepOpen bool) (*Object, error) {
+func (g *GoogleDriveClient) GetFileContent(ctx context.Context, fileID string) (*T.Object, error) {
 	resp, err := g.service.Files.Get(fileID).Download()
 	if err != nil {
 		return nil, err
 	}
 
-	if !keepOpen {
-		defer resp.Body.Close()
-	}
+	// if !keepOpen {
+	// 	defer resp.Body.Close()
+	// }
 
-	obj := &Object{
+	obj := &T.Object{
 		Body:          resp.Body,
 		ContentType:   resp.Header.Get("Content-Type"),
 		ContentLength: resp.ContentLength,
@@ -107,55 +129,59 @@ func (g *GoogleDriveClient) DeleteFile(ctx context.Context, fileID string) error
 	return nil
 }
 
-func (g *GoogleDriveClient) DownloadToFile(ctx context.Context, fileID, destinationPath string) error {
+func (g *GoogleDriveClient) DownloadToFile(ctx context.Context, fileID string) (string, error) {
 	resp, err := g.service.Files.Get(fileID).Download()
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer resp.Body.Close()
 
+	destinationPath := path.Join(g.workDir, fileID)
+
 	out, err := os.Create(destinationPath)
 	if err != nil {
-		return err
+		return "", err
 	}
+
 	defer out.Close()
 
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
-		return err
+		return "", err
 	}
+
 	zlogger.Logger.Info(fmt.Sprintf("Downloaded file ID: %s to %s\n", fileID, destinationPath))
-	return nil
+	return destinationPath, nil
 }
 
 func (g *GoogleDriveClient) DownloadToMemory(ctx context.Context, fileID string, offset int64, chunkSize, fileSize int64) ([]byte, error) {
-    limit := offset + chunkSize - 1
-    if limit > fileSize {
-        limit = fileSize
-    }
+	limit := offset + chunkSize - 1
+	if limit > fileSize {
+		limit = fileSize
+	}
 
-    rng := fmt.Sprintf("bytes=%d-%d", offset, limit)
+	rng := fmt.Sprintf("bytes=%d-%d", offset, limit)
 
-    req := g.service.Files.Get(fileID)
+	req := g.service.Files.Get(fileID)
 
-    req.Header().Set("Range", rng)
+	req.Header().Set("Range", rng)
 
-    resp, err := req.Download()
-    if err != nil {
-        return nil, err
-    }
-    defer resp.Body.Close()
+	resp, err := req.Download()
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 
-    data := make([]byte, chunkSize)
-    n, err := io.ReadFull(resp.Body, data)
+	data := make([]byte, chunkSize)
+	n, err := io.ReadFull(resp.Body, data)
 
-    if err != nil && err != io.ErrUnexpectedEOF {
-        return nil, err
-    }
+	if err != nil && err != io.ErrUnexpectedEOF {
+		return nil, err
+	}
 
-    if int64(n) < chunkSize && fileSize != chunkSize {
-        data = data[:n]
-    }
+	if int64(n) < chunkSize && fileSize != chunkSize {
+		data = data[:n]
+	}
 
-    return data, nil
+	return data, nil
 }

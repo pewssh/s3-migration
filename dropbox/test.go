@@ -10,7 +10,7 @@ import (
 
 var (
 	dropboxAccessToken = ""
-	testFilePath = ""
+	testFilePath       = ""
 )
 
 const TestFileContent = ` by Manuel Gutiérrez Nájera
@@ -37,26 +37,28 @@ though we know with our hearts that she lies.
 `
 
 func TestDropboxClient_ListFiles(t *testing.T) {
-	client, err := GetDropboxClient(dropboxAccessToken)
+	client, err := GetDropboxClient(dropboxAccessToken, "./")
 	if err != nil {
 		zlogger.Logger.Error(fmt.Sprintf("Failed to create Dropbox client: %v", err))
 		return
 	}
 
 	ctx := context.Background()
-	files, err := client.ListFiles(ctx)
-	if err != nil {
-		zlogger.Logger.Error(fmt.Sprintf("Error while listing files: %v", err))
-		return
-	}
+	objectChan, errChan := client.ListFiles(ctx)
 
-	for _, file := range files {
-		zlogger.Logger.Info(fmt.Sprintf("File: %s, Name: %s, Size: %d bytes", file.Path, file.ContentType, file.Size))
+	go func() {
+		for err := range errChan {
+			zlogger.Logger.Error(fmt.Sprintf("Error while listing files: %v", err))
+		}
+	}()
+
+	for object := range objectChan {
+		zlogger.Logger.Info(fmt.Sprintf("Key: %s, Type: %s, Size: %d bytes", object.Key, object.ContentType, object.Size))
 	}
 }
 
 func TestDropboxClient_GetFileContent(t *testing.T) {
-	client, err := GetDropboxClient(dropboxAccessToken)
+	client, err := GetDropboxClient(dropboxAccessToken, "./")
 	if err != nil {
 		zlogger.Logger.Error(fmt.Sprintf("Failed to create Dropbox client: %v", err))
 	}
@@ -89,7 +91,7 @@ func TestDropboxClient_GetFileContent(t *testing.T) {
 }
 
 func TestDropboxClient_DeleteFile(t *testing.T) {
-	client, err := GetDropboxClient(dropboxAccessToken)
+	client, err := GetDropboxClient(dropboxAccessToken, "./")
 	if err != nil {
 		zlogger.Logger.Error(fmt.Sprintf("Failed to create Dropbox client: %v", err))
 		return
@@ -106,7 +108,7 @@ func TestDropboxClient_DeleteFile(t *testing.T) {
 }
 
 func TestDropboxClient_DownloadToFile(t *testing.T) {
-	client, err := GetDropboxClient(dropboxAccessToken)
+	client, err := GetDropboxClient(dropboxAccessToken, "./")
 	if err != nil {
 		zlogger.Logger.Error(fmt.Sprintf("Failed to create Dropbox client: %v", err))
 		return
@@ -123,7 +125,7 @@ func TestDropboxClient_DownloadToFile(t *testing.T) {
 }
 
 func TestDropboxClient_DownloadToMemory(t *testing.T) {
-	client, err := GetDropboxClient(dropboxAccessToken)
+	client, err := GetDropboxClient(dropboxAccessToken, "./")
 	if err != nil {
 		zlogger.Logger.Error(fmt.Sprintf("Failed to create Dropbox client: %v", err))
 		return

@@ -13,6 +13,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/0chain/s3migration/dropbox"
+	"github.com/0chain/s3migration/gdrive"
+	T "github.com/0chain/s3migration/types"
+
 	"github.com/0chain/gosdk/zboxcore/sdk"
 	"github.com/0chain/gosdk/zboxcore/zboxutil"
 	dStorage "github.com/0chain/s3migration/dstorage"
@@ -57,9 +61,9 @@ func abandonAllOperations(err error) {
 }
 
 type Migration struct {
-	zStore   dStorage.DStoreI
-	awsStore s3.AwsI
-	fs       util.FileSystem
+	zStore          dStorage.DStoreI
+	dataSourceStore T.CloudStorageI
+	fs              util.FileSystem
 
 	skip       int
 	retryCount int
@@ -119,35 +123,53 @@ func InitMigration(mConfig *MigrationConfig) error {
 	}
 	mConfig.ChunkSize = int64(mConfig.ChunkNumber) * dStorageService.GetChunkWriteSize()
 	zlogger.Logger.Info("Getting aws storage service")
-	awsStorageService, err := s3.GetAwsClient(
-		mConfig.Bucket,
-		mConfig.Prefix,
-		mConfig.Region,
-		mConfig.DeleteSource,
-		mConfig.NewerThan,
-		mConfig.OlderThan,
-		mConfig.StartAfter,
-		mConfig.WorkDir,
-	)
+
+	var dataSourceStore T.CloudStorageI
+	if mConfig.Source == "s3" {
+		dataSourceStore, err = s3.GetAwsClient(
+			mConfig.Bucket,
+			mConfig.Prefix,
+			mConfig.Region,
+			mConfig.DeleteSource,
+			mConfig.NewerThan,
+			mConfig.OlderThan,
+			mConfig.StartAfter,
+			mConfig.WorkDir,
+		)
+	} else if mConfig.Source == "dropbox" {
+		dataSourceStore, err = dropbox.GetDropboxClient(
+			mConfig.AccessToken,
+			mConfig.WorkDir,
+		)
+	} else if mConfig.Source == "google_drive" {
+		dataSourceStore, err = gdrive.NewGoogleDriveClient(
+			mConfig.AccessToken,
+			mConfig.WorkDir,
+		)
+	} else {
+		zlogger.Logger.Error("invalid source: ", mConfig.Source)
+		return err
+	}
+
 	if err != nil {
 		zlogger.Logger.Error(err)
 		return err
 	}
 
 	migration = Migration{
-		zStore:        dStorageService,
-		awsStore:      awsStorageService,
-		skip:          mConfig.Skip,
-		concurrency:   mConfig.Concurrency,
-		retryCount:    mConfig.RetryCount,
-		stateFilePath: mConfig.StateFilePath,
-		migrateTo:     mConfig.MigrateToPath,
-		deleteSource:  mConfig.DeleteSource,
-		workDir:       mConfig.WorkDir,
-		bucket:        mConfig.Bucket,
-		fs:            util.Fs,
-		chunkSize:     mConfig.ChunkSize,
-		batchSize:     mConfig.BatchSize,
+		zStore:          dStorageService,
+		dataSourceStore: dataSourceStore,
+		skip:            mConfig.Skip,
+		concurrency:     mConfig.Concurrency,
+		retryCount:      mConfig.RetryCount,
+		stateFilePath:   mConfig.StateFilePath,
+		migrateTo:       mConfig.MigrateToPath,
+		deleteSource:    mConfig.DeleteSource,
+		workDir:         mConfig.WorkDir,
+		bucket:          mConfig.Bucket,
+		fs:              util.Fs,
+		chunkSize:       mConfig.ChunkSize,
+		batchSize:       mConfig.BatchSize,
 	}
 
 	rootContext, rootContextCancel = context.WithCancel(context.Background())
@@ -246,7 +268,7 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 	totalObjChan := make(chan struct{}, 100)
 	defer close(totalObjChan)
 	go updateTotalObjects(totalObjChan, m.workDir)
-	objCh, errCh := migration.awsStore.ListFilesInBucket(rootContext)
+	objCh, errCh := migration.dataSourceStore.ListFiles(rootContext)
 	wg := &sync.WaitGroup{}
 	ops := make([]MigrationOperation, 0, m.batchSize)
 	var opLock sync.Mutex
@@ -553,7 +575,7 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 	defer func() {
 		for _, op := range ops {
 			if migration.deleteSource && err == nil {
-				if deleteErr := migration.awsStore.DeleteFile(ctx, op.uploadObj.ObjectKey); deleteErr != nil {
+				if deleteErr := migration.dataSourceStore.DeleteFile(ctx, op.uploadObj.ObjectKey); deleteErr != nil {
 					zlogger.Logger.Error(deleteErr)
 					dsFileHandler.Write([]byte(op.uploadObj.ObjectKey + "\n"))
 				}
@@ -609,7 +631,7 @@ func (m *Migration) processChunkDownload(ctx context.Context, sw *util.StreamWri
 			return
 		default:
 		}
-		data, err := m.awsStore.DownloadToMemory(ctx, downloadObjMeta.ObjectKey, int64(offset), int64(chunkSize), downloadObjMeta.Size)
+		data, err := m.dataSourceStore.DownloadToMemory(ctx, downloadObjMeta.ObjectKey, int64(offset), int64(chunkSize), downloadObjMeta.Size)
 		if err != nil {
 			migrator.DownloadDone(downloadObjMeta, "", err)
 			ctx.Err()
