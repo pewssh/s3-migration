@@ -102,6 +102,9 @@ func GetAllocationIDFromEnv() string {
 func GetAwsCredentialsFromEnv() (string, string) {
 	return os.Getenv("AWS_ACCESS_KEY"), os.Getenv("AWS_SECRET_KEY")
 }
+func GetAccessToken() string {
+	return os.Getenv("AccessToken")
+}
 
 func ConvertGoSDKTimeToTime(in string) time.Time {
 	t, err := time.Parse(ZGoSDKTimeFormat, in)

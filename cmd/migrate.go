@@ -114,7 +114,11 @@ var migrateCmd = &cobra.Command{
 			}
 		}
 
-		if accessKey == "" || secretKey == "" {
+		if source == "" {
+			source = "s3"
+		}
+
+		if (accessKey == "" || secretKey == "") && source == "s3" {
 			if accessKey, secretKey = util.GetAwsCredentialsFromEnv(); accessKey == "" || secretKey == "" {
 				if awsCredPath == "" {
 					return errors.New("aws credentials missing")
@@ -125,15 +129,16 @@ var migrateCmd = &cobra.Command{
 			}
 		}
 
-		if bucket == "" {
+		if accessToken == "" {
+			if accessToken = util.GetAccessToken(); accessToken == "" {
+				return errors.New("Missing Access Token")
+			}
+		}
+		if bucket == "" && source == "s3" {
 			bucket, region, prefix, err = util.GetBucketRegionPrefixFromFile(awsCredPath)
 			if err != nil {
 				return err
 			}
-		}
-
-		if source == "" {
-			source = "s3"
 		}
 
 		if skip < 0 || skip > 2 {
