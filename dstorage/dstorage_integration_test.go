@@ -36,7 +36,7 @@ func TestDStorageService_Upload(t *testing.T) {
 	defer f.Close()
 
 	fileInfo, err := f.Stat()
-	mimeType, err := zboxutil.GetFileContentType(f)
+	mimeType, err := zboxutil.GetFileContentType(path.Ext(fileInfo.Name()), f)
 	if err != nil {
 		log.Println(err)
 	}
