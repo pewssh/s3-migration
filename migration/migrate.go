@@ -122,7 +122,7 @@ func InitMigration(mConfig *MigrationConfig) error {
 		return err
 	}
 	mConfig.ChunkSize = int64(mConfig.ChunkNumber) * dStorageService.GetChunkWriteSize()
-	zlogger.Logger.Info("Getting aws storage service")
+	zlogger.Logger.Info(fmt.Sprintf("Getting %v storage service", mConfig.Source))
 
 	var dataSourceStore T.CloudStorageI
 	if mConfig.Source == "s3" {
@@ -151,6 +151,7 @@ func InitMigration(mConfig *MigrationConfig) error {
 		return err
 	}
 
+	zlogger.Logger.Info(dataSourceStore, "data source info")
 	if err != nil {
 		zlogger.Logger.Error(err)
 		return err

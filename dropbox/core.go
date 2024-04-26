@@ -50,6 +50,7 @@ func (d *DropboxClient) ListFiles(ctx context.Context) (<-chan *T.ObjectMeta, <-
 		arg := files.NewListFolderArg("") // "" for Root
 		arg.Recursive = true
 		arg.Limit = 100
+		arg.IncludeNonDownloadableFiles=false
 
 		res, err := d.dropboxFiles.ListFolder(arg)
 		if err != nil {
