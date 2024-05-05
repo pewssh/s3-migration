@@ -16,6 +16,7 @@ type ObjectMeta struct {
 	Key         string
 	Size        int64
 	ContentType string
+	Ext         string
 }
 
 type CloudStorageI interface {

@@ -64,6 +64,7 @@ func (d *DropboxClient) ListFiles(ctx context.Context) (<-chan *T.ObjectMeta, <-
 					Key:         meta.PathDisplay,
 					Size:        int64(meta.Size),
 					ContentType: mime.TypeByExtension(filepath.Ext(meta.PathDisplay)),
+					Ext:         filepath.Ext(meta.PathDisplay),
 				}
 			}
 		}

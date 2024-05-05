@@ -479,7 +479,7 @@ func processOperation(ctx context.Context, downloadObj *DownloadObjectMeta) (Mig
 		zlogger.Logger.Error(err)
 		return op, err
 	}
-	mimeType, err := zboxutil.GetFileContentType(fileObj)
+	mimeType, err := zboxutil.GetFileContentType(downloadObj.Ext, fileObj)
 	if err != nil {
 		zlogger.Logger.Error("content type error: ", err, " file: ", fileInfo.Name(), " objKey:", downloadObj.ObjectKey)
 		return op, err

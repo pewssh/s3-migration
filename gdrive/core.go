@@ -52,7 +52,7 @@ func (g *GoogleDriveClient) ListFiles(ctx context.Context) (<-chan *T.ObjectMeta
 		filesReq.Q("trashed=false")
 
 		filesReq.Fields(
-			"files(id, mimeType, size)",
+			"files(id, mimeType, size,fileExtension)",
 		)
 
 		filesReq.Pages(ctx, func(page *drive.FileList) error {
@@ -72,6 +72,7 @@ func (g *GoogleDriveClient) ListFiles(ctx context.Context) (<-chan *T.ObjectMeta
 				Key:         file.Id,
 				Size:        file.Size,
 				ContentType: file.MimeType,
+				Ext: file.FileExtension,
 			}
 		}
 
