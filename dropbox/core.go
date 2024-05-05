@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	T "github.com/0chain/s3migration/types"
+	"github.com/pkg/errors"
 
 	"github.com/dropbox/dropbox-sdk-go-unofficial/v6/dropbox"
 	"github.com/dropbox/dropbox-sdk-go-unofficial/v6/dropbox/files"
@@ -28,6 +29,15 @@ func GetDropboxClient(token string, workDir string) (*DropboxClient, error) {
 	}
 
 	client := files.New(config)
+
+	// for invalid Access token
+	arg := files.NewListFolderArg("")
+
+	_, err := client.ListFolder(arg)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid Dropbox token")
+	}
 
 	return &DropboxClient{
 		token:        token,
