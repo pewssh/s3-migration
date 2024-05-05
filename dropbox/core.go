@@ -36,7 +36,7 @@ func GetDropboxClient(token string, workDir string) (*DropboxClient, error) {
 	_, err := client.ListFolder(arg)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "invalid Dropbox token")
+		return nil, errors.Wrap(err, "invalid Client token")
 	}
 
 	return &DropboxClient{
@@ -60,7 +60,7 @@ func (d *DropboxClient) ListFiles(ctx context.Context) (<-chan *T.ObjectMeta, <-
 		arg := files.NewListFolderArg("") // "" for Root
 		arg.Recursive = true
 		arg.Limit = 100
-		arg.IncludeNonDownloadableFiles=false
+		arg.IncludeNonDownloadableFiles = false
 
 		res, err := d.dropboxFiles.ListFolder(arg)
 		if err != nil {
