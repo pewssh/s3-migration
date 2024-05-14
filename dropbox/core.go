@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 
 	T "github.com/0chain/s3migration/types"
-	"github.com/pkg/errors"
 
 	"github.com/dropbox/dropbox-sdk-go-unofficial/v6/dropbox"
 	"github.com/dropbox/dropbox-sdk-go-unofficial/v6/dropbox/files"
@@ -30,14 +29,14 @@ func GetDropboxClient(token string, workDir string) (*DropboxClient, error) {
 
 	client := files.New(config)
 
-	// for invalid Access token
-	arg := files.NewListFolderArg("")
+	// // for invalid Access token
+	// arg := files.NewListFolderArg("")
 
-	_, err := client.ListFolder(arg)
+	// _, err := client.ListFolder(arg)
 
-	if err != nil {
-		return nil, errors.Wrap(err, "invalid Client token")
-	}
+	// if err != nil {
+	// 	return nil, errors.Wrap(err, "invalid Client token")
+	// }
 
 	return &DropboxClient{
 		token:        token,
@@ -152,6 +151,7 @@ func (d *DropboxClient) DownloadToFile(ctx context.Context, filePath string) (st
 }
 
 func (d *DropboxClient) DownloadToMemory(ctx context.Context, objectKey string, offset int64, chunkSize, objectSize int64) ([]byte, error) {
+
 	limit := offset + chunkSize - 1
 	if limit > objectSize {
 		limit = objectSize
