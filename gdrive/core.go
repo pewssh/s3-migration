@@ -9,6 +9,7 @@ import (
 
 	zlogger "github.com/0chain/s3migration/logger"
 	T "github.com/0chain/s3migration/types"
+	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
@@ -29,6 +30,11 @@ func NewGoogleDriveClient(accessToken string, workDir string) (*GoogleDriveClien
 	service, err := drive.NewService(ctx, option.WithHTTPClient(httpClient))
 	if err != nil {
 		return nil, err
+	}
+	_, err = service.Files.List().Do()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid Google Drive access token")
 	}
 
 	return &GoogleDriveClient{
