@@ -306,7 +306,7 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 		wg.Add(1)
 		go func() {
 			defer func(start time.Time) {
-				zlogger.Logger.Info("downloadObjMeta key:  ", downloadObjMeta.ObjectKey, "time taken for the object", time.Since(start))
+				zlogger.Logger.Info("<><>downloadObjMeta key:  ", downloadObjMeta.ObjectKey, "mime", downloadObjMeta.mimeType, "time taken for the object :: ", time.Since(start))
 			}(time.Now())
 
 			defer wg.Done()
