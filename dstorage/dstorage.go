@@ -97,6 +97,10 @@ func (d *DStorageService) Replace(ctx context.Context, remotePath string, r io.R
 }
 
 func (d *DStorageService) Upload(ctx context.Context, remotePath string, r io.Reader, size int64, contentType string, isUpdate bool) sdk.OperationRequest {
+	defer func(start time.Time) {
+		zlogger.Logger.Error("<><>upload object size key:  ", size, "context", ctx, "content type", contentType, "time taken for the object :: ", time.Since(start))
+	}(time.Now())
+
 	fileMeta := sdk.FileMeta{
 		RemotePath: filepath.Clean(remotePath),
 		ActualSize: size,
