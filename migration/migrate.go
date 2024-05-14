@@ -305,9 +305,9 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 		}
 		wg.Add(1)
 		go func() {
-			defer func(start time.Time) {
-				zlogger.Logger.Info("<><>downloadObjMeta key:  ", downloadObjMeta.ObjectKey, "mime", downloadObjMeta.mimeType, "time taken for the object :: ", time.Since(start))
-			}(time.Now())
+			// defer func(start time.Time) {
+			// 	zlogger.Logger.Info("<><>downloadObjMeta key:  ", downloadObjMeta.ObjectKey, "mime", downloadObjMeta.mimeType, "time taken for the object :: ", time.Since(start))
+			// }(time.Now())
 
 			defer wg.Done()
 			err := checkIsFileExist(ctx, downloadObjMeta)
@@ -629,6 +629,10 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 
 func (m *Migration) processChunkDownload(ctx context.Context, sw *util.StreamWriter, migrator *MigrationWorker, downloadObjMeta *DownloadObjectMeta) {
 	// chunk download and pipe data
+
+	defer func(start time.Time) {
+		zlogger.Logger.Info("<><>downloadObjMeta key:  ", downloadObjMeta.ObjectKey, "mime", downloadObjMeta.mimeType, "time taken for the object :: ", time.Since(start))
+	}(time.Now())
 
 	migrator.DownloadStart(downloadObjMeta)
 	offset := 0
