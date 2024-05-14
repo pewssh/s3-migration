@@ -622,10 +622,12 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 		}
 		return err
 	})
-	end := time.Now() // Record the end time
-	duration := end.Sub(start)
-	zlogger.Logger.Info("Time taken for the operation: ", duration)
+
 	for _, op := range ops {
+		end := time.Now() // Record the end time
+		duration := end.Sub(start)
+		zlogger.Logger.Info("Time taken for the operation: ", duration)
+
 		migrator.UploadDone(op.uploadObj, err)
 		zlogger.Logger.Info("upload done: ", op.uploadObj.ObjectKey, " size ", op.uploadObj.Size, err)
 	}
