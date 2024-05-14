@@ -408,6 +408,7 @@ func (m *Migration) UploadWorker(ctx context.Context, migrator *MigrationWorker)
 	if len(ops) > 0 {
 		wg.Add(1)
 		go func(ops []MigrationOperation) {
+			zlogger.Logger.Error("uploading remaining objects for testing <<>>: ", len(ops))
 			m.processMultiOperation(ctx, ops, migrator)
 			wg.Done()
 		}(ops)
@@ -603,10 +604,8 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 		}
 	}()
 	fileOps := make([]sdk.OperationRequest, 0, len(ops))
-	var start time.Time
 
 	for _, op := range ops {
-		start = time.Now()
 		migrator.UploadStart(op.uploadObj)
 		zlogger.Logger.Info("upload start: ", op.uploadObj.ObjectKey, " size: ", op.uploadObj.Size)
 		fileOps = append(fileOps, op.Operation)
@@ -624,10 +623,6 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 	})
 
 	for _, op := range ops {
-		end := time.Now() // Record the end time
-		duration := end.Sub(start)
-		zlogger.Logger.Info("Time taken for the operation: ", duration)
-
 		migrator.UploadDone(op.uploadObj, err)
 		zlogger.Logger.Info("upload done: ", op.uploadObj.ObjectKey, " size ", op.uploadObj.Size, err)
 	}
