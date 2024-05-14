@@ -305,6 +305,10 @@ func (m *Migration) DownloadWorker(ctx context.Context, migrator *MigrationWorke
 		}
 		wg.Add(1)
 		go func() {
+			defer func(start time.Time) {
+				zlogger.Logger.Info("downloadObjMeta key:  ", downloadObjMeta.ObjectKey, time.Since(start))
+			}(time.Now())
+
 			defer wg.Done()
 			err := checkIsFileExist(ctx, downloadObjMeta)
 			if err != nil {
@@ -467,6 +471,11 @@ func checkDownloadStatus(downloadObj *DownloadObjectMeta) error {
 }
 
 func processOperation(ctx context.Context, downloadObj *DownloadObjectMeta) (MigrationOperation, error) {
+
+	defer func(start time.Time) {
+		zlogger.Logger.Info("uploading object key:  ", downloadObj.ObjectKey, time.Since(start))
+	}(time.Now())
+
 	remotePath := getRemotePath(downloadObj.ObjectKey)
 	var op MigrationOperation
 	fileObj, err := migration.fs.Open(downloadObj.LocalPath)
