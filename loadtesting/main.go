@@ -4,20 +4,44 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
+
+	"github.com/go-yaml/yaml"
 )
 
+type TokenData struct {
+	AccessToken string `yaml:"access_token"`
+}
+
 func main() {
-	// Define and parse command-line flags
-	accessToken := flag.String("access-token", "", "Access token for the migration command")
+	tokenFile := flag.String("token-file", "token.yaml", "File containing the access token")
+
+	// Define a flag for the access token itself
+	_ = flag.String("access-token", "", "Access token for the migration command")
+
+	// Parse the flags
 	flag.Parse()
 
-	if *accessToken == "" {
-		fmt.Println("Access token is required")
-		return
+	// Open the token file
+	file, err := os.Open(*tokenFile)
+
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	// Parse the YAML file
+	var tokenData TokenData
+	decoder := yaml.NewDecoder(file)
+	err = decoder.Decode(&tokenData)
+	if err != nil {
+		panic(err)
 	}
 
+	// Extract the access token
+	accessToken := tokenData.AccessToken
 	// Run the first command to create a new allocation
 	newAllocationCmd := exec.Command("./zbox", "newallocation", "--size", "500032385536", "--lock", "100")
 
@@ -26,7 +50,7 @@ func main() {
 	newAllocationCmd.Stdout = &out
 	newAllocationCmd.Stderr = &stderr
 
-	err := newAllocationCmd.Run()
+	err = newAllocationCmd.Run()
 	if err != nil {
 		fmt.Printf("Error creating allocation: %s\n", err)
 		fmt.Printf("Stderr: %s\n", stderr.String())
@@ -47,7 +71,7 @@ func main() {
 	fmt.Printf("Extracted allocation ID: %s\n", allocationID)
 
 	// Run the second command to migrate using the extracted allocation ID and provided access token
-	migrateCmd := exec.Command("./s3migration", "migrate", "--allocation", allocationID, "--source", "google_drive", "--access-token", *accessToken)
+	migrateCmd := exec.Command("./zbox", "migrate", "--allocation", allocationID, "--token", accessToken)
 
 	var out2 bytes.Buffer
 	var stderr2 bytes.Buffer
