@@ -77,43 +77,19 @@ func main() {
 
 	rawOutput, err = migrateCmd.CombinedOutput()
 
-	var out2 bytes.Buffer
-	// var stderr2 bytes.Buffer
-	migrateCmd.Stdout = &out2
-	// migrateCmd.Stderr = &stderr2
-
-	error_w := migrateCmd.Run()
 	if err != nil {
-		fmt.Printf("Error running migration: %s\n", error_w)
 		fmt.Printf("Error running migration: %s\n", err)
-		// printAllLines(stderr2.Bytes())
-		return
 	}
 	fmt.Printf("Output of migrate command: %s\n", rawOutput)
 
-	// Print the output of the migration command
-	fmt.Printf("Output of migrate command: %s\n", out2.String())
-
-	// cancelling the allocation created in the first command
-
-	// ./zbox  alloc-cancel  --allocation 663943b55c8bb28a6728831291a3bbec6044c333c25338e60568355b7338d610
 	cancelAllocationCmd := exec.Command("./zbox", "alloc-cancel", "--allocation", allocationID)
 
-	//printing the log for the cancel allocation command
-	var out3 bytes.Buffer
-	var stderr3 bytes.Buffer
-	cancelAllocationCmd.Stdout = &out3
-	cancelAllocationCmd.Stderr = &stderr3
+	rawOutput, err = cancelAllocationCmd.CombinedOutput()
 
-	err = cancelAllocationCmd.Run()
 	if err != nil {
-		fmt.Printf("Error cancelling allocation: %s\n", err)
-		printAllLines(stderr3.Bytes())
-		return
+		fmt.Printf("Error cancelling the allocation migration: %s\n", err)
 	}
-
-	// Print the output of the cancel allocation command
-	fmt.Printf("Output of cancel allocation command: %s\n", out3.String())
+	fmt.Printf("Output of allocation cancel command: %s\n", rawOutput)
 
 }
 
