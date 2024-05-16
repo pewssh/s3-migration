@@ -50,12 +50,14 @@ func main() {
 	newAllocationCmd.Stdout = &out
 	newAllocationCmd.Stderr = &stderr
 
-	err = newAllocationCmd.Run()
+	rawOutput, err := newAllocationCmd.CombinedOutput()
+
 	if err != nil {
 		fmt.Printf("Error creating allocation: %s\n", err)
 		printAllLines(stderr.Bytes())
 		return
 	}
+	fmt.Printf("Output of migrate command: %s\n", rawOutput)
 
 	// Extract the allocation ID from the output
 	output := out.String()
@@ -73,7 +75,7 @@ func main() {
 	// Run the second command to migrate using the extracted allocation ID and provided access token
 	migrateCmd := exec.Command("./s3migration", "migrate", "--allocation", allocationID, "--source", "google_drive", "--access-token", accessToken)
 
-	rawOutput, err := migrateCmd.CombinedOutput()
+	rawOutput, err = migrateCmd.CombinedOutput()
 
 	var out2 bytes.Buffer
 	// var stderr2 bytes.Buffer
