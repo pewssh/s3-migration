@@ -18,15 +18,11 @@ type TokenData struct {
 func main() {
 	tokenFile := flag.String("token-file", "token.yaml", "File containing the access token")
 
-	// Define a flag for the access token itself
-	_ = flag.String("access-token", "", "Access token for the migration command")
-
 	// Parse the flags
 	flag.Parse()
 
 	// Open the token file
 	file, err := os.Open(*tokenFile)
-
 	if err != nil {
 		panic(err)
 	}
@@ -42,7 +38,7 @@ func main() {
 
 	// Extract the access token
 	accessToken := tokenData.AccessToken
-	// Run the first command to create a new allocation
+
 	newAllocationCmd := exec.Command("./zbox", "newallocation", "--size", "500032385536", "--lock", "100")
 
 	var out bytes.Buffer
@@ -53,7 +49,7 @@ func main() {
 	err = newAllocationCmd.Run()
 	if err != nil {
 		fmt.Printf("Error creating allocation: %s\n", err)
-		fmt.Printf("Stderr: %s\n", stderr.String())
+		printAllLines(stderr.Bytes())
 		return
 	}
 
@@ -81,10 +77,22 @@ func main() {
 	err = migrateCmd.Run()
 	if err != nil {
 		fmt.Printf("Error running migration: %s\n", err)
-		fmt.Printf("Stderr: %s\n", stderr2.String())
+		printAllLines(stderr2.Bytes())
 		return
 	}
 
 	// Print the output of the migration command
 	fmt.Printf("Output of migrate command: %s\n", out2.String())
+}
+
+// printAllLines prints all lines from the given byte slice
+func printAllLines(data []byte) {
+	scanner := bytes.NewBuffer(data)
+	for {
+		line, err := scanner.ReadString('\n')
+		if err != nil {
+			break
+		}
+		fmt.Print(line)
+	}
 }
