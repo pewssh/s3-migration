@@ -71,7 +71,7 @@ func main() {
 	fmt.Printf("Extracted allocation ID: %s\n", allocationID)
 
 	// Run the second command to migrate using the extracted allocation ID and provided access token
-	migrateCmd := exec.Command("./s3migration", "migrate", "--allocation", allocationID, "--access-token", accessToken, " --source google_drive")
+	migrateCmd := exec.Command("./s3migration", "migrate", "--allocation", allocationID, "--source google_drive", "--access-token", accessToken)
 
 	var out2 bytes.Buffer
 	var stderr2 bytes.Buffer
