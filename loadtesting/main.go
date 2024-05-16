@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"os"
@@ -37,32 +36,24 @@ func main() {
 		panic(err)
 	}
 
-	//
-	// Extract the access token
+	// Extract the access token and allocation size
 	accessToken := tokenData.AccessToken
 	allocationSize := tokenData.AllocationSize
 
 	// Run the first command to create a new allocation
 	newAllocationCmd := exec.Command("./zbox", "newallocation", "--size", allocationSize, "--lock", "100")
 
-	var out bytes.Buffer
-	var stderr bytes.Buffer
-	newAllocationCmd.Stdout = &out
-	newAllocationCmd.Stderr = &stderr
-
+	// Capture the combined output of the command
 	rawOutput, err := newAllocationCmd.CombinedOutput()
-
 	if err != nil {
 		fmt.Printf("Error creating allocation: %s\n", err)
-		printAllLines(stderr.Bytes())
+		fmt.Print(string(rawOutput))
 		return
 	}
-	fmt.Printf("Output of migrate command: %s\n", rawOutput)
+	fmt.Printf("Output of newallocation command: %s\n", string(rawOutput))
 
 	// Extract the allocation ID from the output
-	output := out.String()
-	fmt.Printf("Output of newallocation command: %s\n", output)
-
+	output := string(rawOutput)
 	re := regexp.MustCompile(`Allocation created: ([a-f0-9]+)`)
 	match := re.FindStringSubmatch(output)
 	if len(match) < 2 {
@@ -75,32 +66,25 @@ func main() {
 	// Run the second command to migrate using the extracted allocation ID and provided access token
 	migrateCmd := exec.Command("./s3migration", "migrate", "--allocation", allocationID, "--source", "google_drive", "--access-token", accessToken)
 
+	// Capture the combined output of the migration command
 	rawOutput, err = migrateCmd.CombinedOutput()
-
 	if err != nil {
 		fmt.Printf("Error running migration: %s\n", err)
+		fmt.Print(string(rawOutput))
+		return
 	}
-	fmt.Printf("Output of migrate command: %s\n", rawOutput)
+	fmt.Printf("Output of migrate command: %s\n", string(rawOutput))
 
+	// Run the command to cancel the allocation migration
 	cancelAllocationCmd := exec.Command("./zbox", "alloc-cancel", "--allocation", allocationID)
 
+	// Capture the combined output of the cancel command
 	rawOutput, err = cancelAllocationCmd.CombinedOutput()
-
 	if err != nil {
 		fmt.Printf("Error cancelling the allocation migration: %s\n", err)
-	}
-	fmt.Printf("Output of allocation cancel command: %s\n", rawOutput)
+		fmt.Print(string(rawOutput))
 
-}
-
-// printAllLines prints all lines from the given byte slice
-func printAllLines(data []byte) {
-	scanner := bytes.NewBuffer(data)
-	for {
-		line, err := scanner.ReadString('\n')
-		if err != nil {
-			break
-		}
-		fmt.Print(line)
+		return
 	}
+	fmt.Printf("Output of allocation cancel command: %s\n", string(rawOutput))
 }
