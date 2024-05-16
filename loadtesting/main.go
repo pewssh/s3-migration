@@ -6,16 +6,63 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strings"
 
 	"github.com/go-yaml/yaml"
 )
+
+func main() {
+	token := flag.String("command", "", "Command for the Google Drive API Testing")
+
+	flag.Parse()
+	fmt.Println("Command: ", *token)
+	switch *token {
+	case "cancelalloc":
+		cancelAlloc()
+	case "run_test":
+		runTest()
+	}
+}
+
+func cancelAlloc() {
+	listCommand := exec.Command("./zbox", "listallocations")
+
+	// Capture the combined output of the command
+	rawOutput, err := listCommand.CombinedOutput()
+	if err != nil {
+		fmt.Printf("Error listing allocations: %s\n", err)
+		return
+	}
+	lines := strings.Split(strings.TrimSpace(string(rawOutput)), "\n")
+
+	// Get the last line
+	lastLine := lines[len(lines)-2]
+
+	// Extract the allocation ID from the last line
+	lastLineParts := strings.Split(lastLine, " |")[0]
+	allocationID := strings.TrimSpace(lastLineParts)
+	fmt.Printf("Last allocation created ID: %s\n", allocationID)
+
+	// Run the command to cancel the allocation migration
+	cancelAllocationCmd := exec.Command("./zbox", "alloc-cancel", "--allocation", allocationID)
+
+	// Capture the combined output of the cancel command
+	rawOutput, err = cancelAllocationCmd.CombinedOutput()
+
+	if err != nil {
+		fmt.Printf("Error cancelling the allocation migration: %s\n", err)
+		fmt.Print(string(rawOutput))
+		return
+	}
+	fmt.Printf("Output of allocation cancel command: %s\n", string(rawOutput))
+}
 
 type TokenData struct {
 	AccessToken    string `yaml:"access_token"`
 	AllocationSize string `yaml:"allocation_size"`
 }
 
-func main() {
+func runTest() {
 	var rawOutput []byte
 	var err error
 	var allocationID string
