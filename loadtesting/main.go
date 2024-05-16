@@ -12,7 +12,8 @@ import (
 )
 
 type TokenData struct {
-	AccessToken string `yaml:"access_token"`
+	AccessToken    string `yaml:"access_token"`
+	AllocationSize string `yaml:"allocation_size"`
 }
 
 func main() {
@@ -36,11 +37,13 @@ func main() {
 		panic(err)
 	}
 
+	//
 	// Extract the access token
 	accessToken := tokenData.AccessToken
+	allocationSize := tokenData.AllocationSize
 
 	// Run the first command to create a new allocation
-	newAllocationCmd := exec.Command("./zbox", "newallocation", "--size", "500032385536", "--lock", "100")
+	newAllocationCmd := exec.Command("./zbox", "newallocation", "--size", allocationSize, "--lock", "100")
 
 	var out bytes.Buffer
 	var stderr bytes.Buffer
@@ -88,6 +91,28 @@ func main() {
 
 	// Print the output of the migration command
 	fmt.Printf("Output of migrate command: %s\n", out2.String())
+
+	// cancelling the allocation created in the first command
+
+	// ./zbox  alloc-cancel  --allocation 663943b55c8bb28a6728831291a3bbec6044c333c25338e60568355b7338d610
+	cancelAllocationCmd := exec.Command("./zbox", "alloc-cancel", "--allocation", allocationID)
+
+	//printing the log for the cancel allocation command
+	var out3 bytes.Buffer
+	var stderr3 bytes.Buffer
+	cancelAllocationCmd.Stdout = &out3
+	cancelAllocationCmd.Stderr = &stderr3
+
+	err = cancelAllocationCmd.Run()
+	if err != nil {
+		fmt.Printf("Error cancelling allocation: %s\n", err)
+		printAllLines(stderr3.Bytes())
+		return
+	}
+
+	// Print the output of the cancel allocation command
+	fmt.Printf("Output of cancel allocation command: %s\n", out3.String())
+
 }
 
 // printAllLines prints all lines from the given byte slice
