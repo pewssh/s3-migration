@@ -16,6 +16,11 @@ type TokenData struct {
 }
 
 func main() {
+	var rawOutput []byte
+	var err error
+	var allocationID string
+
+	token := flag.String("token", "", "Access token for the Google Drive API")
 	tokenFile := flag.String("token-file", "token.yaml", "File containing the access token")
 
 	// Parse the flags
@@ -35,16 +40,21 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
+	var accessToken string
 	// Extract the access token and allocation size
-	accessToken := tokenData.AccessToken
+	if token == nil {
+		fmt.Println("Access token not provided")
+		accessToken = tokenData.AccessToken
+	} else {
+		accessToken = *token
+	}
 	allocationSize := tokenData.AllocationSize
 
 	// Run the first command to create a new allocation
 	newAllocationCmd := exec.Command("./zbox", "newallocation", "--size", allocationSize, "--lock", "100")
 
 	// Capture the combined output of the command
-	rawOutput, err := newAllocationCmd.CombinedOutput()
+	rawOutput, err = newAllocationCmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("Error creating allocation: %s\n", err)
 		fmt.Print(string(rawOutput))
@@ -60,9 +70,25 @@ func main() {
 		fmt.Println("Failed to extract allocation ID from output")
 		return
 	}
-	allocationID := match[1]
+	allocationID = match[1]
 	fmt.Printf("Extracted allocation ID: %s\n", allocationID)
 
+	defer func() {
+		if allocationID != "" {
+			// Run the command to cancel the allocation migration
+			cancelAllocationCmd := exec.Command("./zbox", "alloc-cancel", "--allocation", allocationID)
+
+			// Capture the combined output of the cancel command
+			rawOutput, err = cancelAllocationCmd.CombinedOutput()
+			if err != nil {
+				fmt.Printf("Error cancelling the allocation migration: %s\n", err)
+				fmt.Print(string(rawOutput))
+
+				return
+			}
+			fmt.Printf("Output of allocation cancel command: %s\n", string(rawOutput))
+		}
+	}()
 	// Run the second command to migrate using the extracted allocation ID and provided access token
 	migrateCmd := exec.Command("./s3migration", "migrate", "--allocation", allocationID, "--source", "google_drive", "--access-token", accessToken)
 
@@ -75,16 +101,4 @@ func main() {
 	}
 	fmt.Printf("Output of migrate command: %s\n", string(rawOutput))
 
-	// Run the command to cancel the allocation migration
-	cancelAllocationCmd := exec.Command("./zbox", "alloc-cancel", "--allocation", allocationID)
-
-	// Capture the combined output of the cancel command
-	rawOutput, err = cancelAllocationCmd.CombinedOutput()
-	if err != nil {
-		fmt.Printf("Error cancelling the allocation migration: %s\n", err)
-		fmt.Print(string(rawOutput))
-
-		return
-	}
-	fmt.Printf("Output of allocation cancel command: %s\n", string(rawOutput))
 }
