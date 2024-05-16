@@ -39,6 +39,7 @@ func main() {
 	// Extract the access token
 	accessToken := tokenData.AccessToken
 
+	// Run the first command to create a new allocation
 	newAllocationCmd := exec.Command("./zbox", "newallocation", "--size", "500032385536", "--lock", "100")
 
 	var out bytes.Buffer
@@ -69,17 +70,21 @@ func main() {
 	// Run the second command to migrate using the extracted allocation ID and provided access token
 	migrateCmd := exec.Command("./s3migration", "migrate", "--allocation", allocationID, "--source", "google_drive", "--access-token", accessToken)
 
-	var out2 bytes.Buffer
-	var stderr2 bytes.Buffer
-	migrateCmd.Stdout = &out2
-	migrateCmd.Stderr = &stderr2
+	rawOutput, err := migrateCmd.CombinedOutput()
 
-	err = migrateCmd.Run()
+	var out2 bytes.Buffer
+	// var stderr2 bytes.Buffer
+	migrateCmd.Stdout = &out2
+	// migrateCmd.Stderr = &stderr2
+
+	error_w := migrateCmd.Run()
 	if err != nil {
+		fmt.Printf("Error running migration: %s\n", error_w)
 		fmt.Printf("Error running migration: %s\n", err)
-		printAllLines(stderr2.Bytes())
+		// printAllLines(stderr2.Bytes())
 		return
 	}
+	fmt.Printf("Output of migrate command: %s\n", rawOutput)
 
 	// Print the output of the migration command
 	fmt.Printf("Output of migrate command: %s\n", out2.String())
