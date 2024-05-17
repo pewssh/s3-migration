@@ -39,6 +39,7 @@ type DownloadObjectMeta struct {
 	IsFileAlreadyExist bool
 	mimeType           string
 	Ext                string
+	downloadStartTime  time.Time
 }
 
 type UploadObjectMeta struct {
@@ -144,6 +145,7 @@ func (m *MigrationWorker) PauseDownload() {
 
 func (m *MigrationWorker) DownloadStart(d *DownloadObjectMeta) {
 	zlogger.Logger.Info("Started to download ", d.ObjectKey)
+	d.downloadStartTime = time.Now()
 	m.incrDownloadConcurrency()
 	m.downloadQueue <- d
 	m.updateFileSizeOnDisk(d.Size)
@@ -159,6 +161,10 @@ func (m *MigrationWorker) DownloadDone(d *DownloadObjectMeta, localPath string, 
 	} else {
 		d.LocalPath = localPath
 		d.DoneChan <- struct{}{}
+		endTime := time.Now()
+		duration := endTime.Sub(d.downloadStartTime)
+		zlogger.Logger.Info("Download completed for ", d.mimeType, " in ", duration)
+
 		zlogger.Logger.Info("Downloaded ", d.ObjectKey)
 	}
 }
