@@ -583,6 +583,11 @@ func (m *Migration) UpdateStateFile(migrateHandler *MigrationWorker) {
 
 func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOperation, migrator *MigrationWorker) error {
 	var err error
+
+	defer func(start time.Time) {
+		zlogger.Logger.Info("<>~~<>downloadObjMeta key:  ", ops[len(ops)-1], "mime", migrator, "time taken for the object :: ", time.Since(start))
+	}(time.Now())
+
 	defer func() {
 		for _, op := range ops {
 			if migration.deleteSource && err == nil {
@@ -605,10 +610,6 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 	}()
 	fileOps := make([]sdk.OperationRequest, 0, len(ops))
 
-	defer func(start time.Time) {
-		zlogger.Logger.Info("<>~~<>downloadObjMeta key:  ", ops[len(ops)-1], "mime", migrator, "time taken for the object :: ", time.Since(start))
-	}(time.Now())
-
 	for _, op := range ops {
 		migrator.UploadStart(op.uploadObj)
 		zlogger.Logger.Info("upload start: ", op.uploadObj.ObjectKey, " size: ", op.uploadObj.Size)
@@ -629,9 +630,7 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 	for _, op := range ops {
 		migrator.UploadDone(op.uploadObj, err)
 		zlogger.Logger.Info("upload done: ", op.uploadObj.ObjectKey, " size ", op.uploadObj.Size, err)
-		zlogger.Logger.Info("upload operation type: ", op.Operation.OperationType, " size ", op.Operation.FileReader, err)
 	}
-
 	migrator.SetMigrationError(err)
 	return err
 }
