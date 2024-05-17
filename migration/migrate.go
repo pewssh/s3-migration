@@ -585,7 +585,7 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 	var err error
 
 	defer func(start time.Time) {
-		zlogger.Logger.Error("<>~~<>downloadObjMeta key:  ", ops[len(ops)-1], "mime", migrator, "time taken for the object :: ", time.Since(start))
+		zlogger.Logger.Info("<>~~<>downloadObjMeta key:  ", ops[len(ops)-1], "mime", migrator, "time taken for the object :: ", time.Since(start))
 	}(time.Now())
 
 	defer func() {
