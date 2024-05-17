@@ -634,8 +634,14 @@ func (m *Migration) processMultiOperation(ctx context.Context, ops []MigrationOp
 func (m *Migration) processChunkDownload(ctx context.Context, sw *util.StreamWriter, migrator *MigrationWorker, downloadObjMeta *DownloadObjectMeta) {
 	// chunk download and pipe data
 
-	// add time to record the start time
-	start_time := time.Now()
+	startTime := time.Now() // Record start time
+	defer func(startTime time.Time) {
+		endTime := time.Now() 
+		duration := endTime.Sub(startTime)
+		zlogger.Logger.Info("Download completed for ", downloadObjMeta.mimeType, " in ", duration)
+
+	}(startTime)
+
 	migrator.DownloadStart(downloadObjMeta)
 	offset := 0
 	chunkSize := int(m.chunkSize)
@@ -671,8 +677,5 @@ func (m *Migration) processChunkDownload(ctx context.Context, sw *util.StreamWri
 	}
 	migrator.DownloadDone(downloadObjMeta, "", nil)
 	//end of download
-	elapsed := time.Since(start_time)
 
-	// log the time taken for the download
-	zlogger.Logger.Info("Download completed for ", downloadObjMeta.ObjectKey, " in ", elapsed)
 }
