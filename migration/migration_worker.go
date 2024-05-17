@@ -94,6 +94,7 @@ func (m *MigrationWorker) PauseUpload() {
 }
 
 func (m *MigrationWorker) UploadStart(u *UploadObjectMeta) {
+	zlogger.Logger.Info("!!! <> Started to upload ", u.ObjectKey)
 	m.incrUploadConcurrency()
 	atomic.AddInt64(&m.currentUploadSize, u.Size)
 	m.uploadQueue <- u
