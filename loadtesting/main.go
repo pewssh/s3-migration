@@ -38,7 +38,7 @@ func cancelAlloc() {
 	lines := strings.Split(strings.TrimSpace(string(rawOutput)), "\n")
 
 	// Get the last line
-	lastLine := lines[len(lines)-2]
+	lastLine := lines[len(lines)-1]
 
 	// Extract the allocation ID from the last line
 	lastLineParts := strings.Split(lastLine, " |")[0]
