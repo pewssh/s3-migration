@@ -12,15 +12,17 @@ import (
 )
 
 func main() {
-	token := flag.String("command", "", "Command for the Google Drive API Testing")
+	run_command := flag.String("command", "", "Command for the Google Drive API Testing")
+
+	token := flag.String("token", "", "Access token for the Google Drive API")
 
 	flag.Parse()
-	fmt.Println("Command: ", *token)
-	switch *token {
+	fmt.Println("Command: ", *run_command)
+	switch *run_command {
 	case "cancelalloc":
 		cancelAlloc()
 	case "run_test":
-		runTest()
+		runTest(token)
 	}
 }
 
@@ -62,12 +64,11 @@ type TokenData struct {
 	AllocationSize string `yaml:"allocation_size"`
 }
 
-func runTest() {
+func runTest(token *string) {
 	var rawOutput []byte
 	var err error
 	var allocationID string
 
-	token := flag.String("token", "", "Access token for the Google Drive API")
 	tokenFile := flag.String("token-file", "token.yaml", "File containing the access token")
 
 	// Parse the flags
@@ -89,7 +90,7 @@ func runTest() {
 	}
 	var accessToken string
 	// Extract the access token and allocation size
-	if token == nil {
+	if *token == "" {
 		fmt.Println("Access token not provided")
 		accessToken = tokenData.AccessToken
 	} else {
