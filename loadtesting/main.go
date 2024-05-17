@@ -15,6 +15,8 @@ func main() {
 	run_command := flag.String("command", "", "Command for the Google Drive API Testing")
 
 	token := flag.String("token", "", "Access token for the Google Drive API")
+	size := flag.String("size", "", "Size of the allocation")
+	create := flag.String("create", "", "Create allocation if required")
 
 	flag.Parse()
 	fmt.Println("Command: ", *run_command)
@@ -22,7 +24,7 @@ func main() {
 	case "cancelalloc":
 		cancelAlloc()
 	case "run_test":
-		runTest(token)
+		runTest(token, size, create)
 	}
 }
 
@@ -64,7 +66,7 @@ type TokenData struct {
 	AllocationSize string `yaml:"allocation_size"`
 }
 
-func runTest(token *string) {
+func runTest(token *string, size *string, create *string) {
 	var rawOutput []byte
 	var err error
 	var allocationID string
@@ -79,6 +81,7 @@ func runTest(token *string) {
 	if err != nil {
 		panic(err)
 	}
+
 	defer file.Close()
 
 	// Parse the YAML file
@@ -96,29 +99,60 @@ func runTest(token *string) {
 	} else {
 		accessToken = *token
 	}
-	allocationSize := tokenData.AllocationSize
 
-	// Run the first command to create a new allocation
-	newAllocationCmd := exec.Command("./zbox", "newallocation", "--size", allocationSize, "--lock", "100")
-
-	// Capture the combined output of the command
-	rawOutput, err = newAllocationCmd.CombinedOutput()
-	if err != nil {
-		fmt.Printf("Error creating allocation: %s\n", err)
-		fmt.Print(string(rawOutput))
+	if create == nil {
+		fmt.Println("Create allocation not provided")
 		return
 	}
-	fmt.Printf("Output of newallocation command: %s\n", string(rawOutput))
+	// Check if the allocation needs to be created
+	if *create == "true" {
+		fmt.Println("Creating new allocation")
+		var allocationSize string
+		if *size == "" {
+			fmt.Println("Allocation size not provided")
+			allocationSize = tokenData.AllocationSize
+		} else {
+			allocationSize = *size
+		}
 
-	// Extract the allocation ID from the output
-	output := string(rawOutput)
-	re := regexp.MustCompile(`Allocation created: ([a-f0-9]+)`)
-	match := re.FindStringSubmatch(output)
-	if len(match) < 2 {
-		fmt.Println("Failed to extract allocation ID from output")
-		return
+		// Run the first command to create a new allocation
+		newAllocationCmd := exec.Command("./zbox", "newallocation", "--size", allocationSize, "--lock", "100")
+
+		// Capture the combined output of the command
+		rawOutput, err = newAllocationCmd.CombinedOutput()
+		if err != nil {
+			fmt.Printf("Error creating allocation: %s\n", err)
+			fmt.Print(string(rawOutput))
+			return
+		}
+		fmt.Printf("Output of newallocation command: %s\n", string(rawOutput))
+
+		// Extract the allocation ID from the output
+		output := string(rawOutput)
+		re := regexp.MustCompile(`Allocation created: ([a-f0-9]+)`)
+		match := re.FindStringSubmatch(output)
+		if len(match) < 2 {
+			fmt.Println("Failed to extract allocation ID from output")
+			return
+		}
+		allocationID = match[1]
+	} else {
+		// List the allocations
+		listCommand := exec.Command("./zbox", "listallocations")
+
+		rawOutput, err = listCommand.CombinedOutput()
+		if err != nil {
+			fmt.Printf("Error listing allocations: %s\n", err)
+			return
+		}
+		lines := strings.Split(strings.TrimSpace(string(rawOutput)), "\n")
+
+		lastLine := lines[len(lines)-1]
+
+		// Extract the allocation ID from the last line
+		lastLineParts := strings.Split(lastLine, " |")[0]
+		allocationID = strings.TrimSpace(lastLineParts)
 	}
-	allocationID = match[1]
 	fmt.Printf("Extracted allocation ID: %s\n", allocationID)
 
 	defer func() {
@@ -137,6 +171,7 @@ func runTest(token *string) {
 			fmt.Printf("Output of allocation cancel command: %s\n", string(rawOutput))
 		}
 	}()
+
 	// Run the second command to migrate using the extracted allocation ID and provided access token
 	migrateCmd := exec.Command("./s3migration", "migrate", "--allocation", allocationID, "--source", "google_drive", "--access-token", accessToken)
 
@@ -150,3 +185,5 @@ func runTest(token *string) {
 	fmt.Printf("Output of migrate command: %s\n", string(rawOutput))
 
 }
+
+// ./s3migration migrate --allocation b98cb899d74d68e23cfb4c868d7d1604c563b81cdc1e3cfe20f90582d7d4a5f7   --source google_drive --access-token ya29.a0AXooCgvLlchgmnnuaJc_KMftreV_RARhZXwCM5B2kdFGb4Uz-LMy4EzYlAH0UN1wTwWqFoDUaaRc8zdY0G0biZaHsR_gvToVwP4QR1-3v5vltYRWVnbUG20e1HKPKIY1kKkZuFCBWtWlu8GJFKMPWBxTYDRjyMahHr_uaCgYKAS8SARESFQHGX2MiN85OY3QsyDcVSN8OBWlQzw0171
