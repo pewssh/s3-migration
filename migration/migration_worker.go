@@ -42,11 +42,12 @@ type DownloadObjectMeta struct {
 }
 
 type UploadObjectMeta struct {
-	ObjectKey string
-	Size      int64
-	DoneChan  chan struct{}
-	ErrChan   chan error
-	LocalPath string
+	ObjectKey       string
+	Size            int64
+	DoneChan        chan struct{}
+	ErrChan         chan error
+	LocalPath       string
+	UploadStartTime time.Time
 }
 
 func NewMigrationWorker(wd string) *MigrationWorker {
@@ -96,6 +97,7 @@ func (m *MigrationWorker) PauseUpload() {
 func (m *MigrationWorker) UploadStart(u *UploadObjectMeta) {
 	zlogger.Logger.Info("!!! <> Started to upload ", u.ObjectKey)
 	m.incrUploadConcurrency()
+	u.UploadStartTime = time.Now() // Record the start time
 	atomic.AddInt64(&m.currentUploadSize, u.Size)
 	m.uploadQueue <- u
 }
@@ -104,10 +106,12 @@ func (m *MigrationWorker) UploadDone(u *UploadObjectMeta, err error) {
 	m.updateFileSizeOnDisk(-u.Size)
 	m.decrUploadConcurrency()
 	atomic.AddInt64(&m.currentUploadSize, -u.Size)
+	uploadTime := time.Since(u.UploadStartTime) // Calculate upload time
 	if err != nil {
 		zlogger.Logger.Error("Error while uploading ", u.ObjectKey, " Error: ", err)
 		u.ErrChan <- err
 	} else {
+		zlogger.Logger.Info("Upload completed for ", u.ObjectKey, " in ", uploadTime)
 		u.DoneChan <- struct{}{}
 	}
 }
