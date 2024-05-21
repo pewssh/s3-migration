@@ -9,14 +9,17 @@ import (
 	"strings"
 
 	"github.com/go-yaml/yaml"
+
+	logparser "github.com/0chain/s3migration/loadtesting/log_parser"
 )
 
 func main() {
 	run_command := flag.String("command", "", "Command for the Google Drive API Testing")
 
 	token := flag.String("token", "", "Access token for the Google Drive API")
-	size := flag.String("size", "", "Size of the allocation")
 	create := flag.String("create", "", "Create allocation if required")
+	size := flag.String("size", "", "Size of the allocation")
+	log_file_name := flag.String("file", "", "Log file name")
 
 	flag.Parse()
 	fmt.Println("Command: ", *run_command)
@@ -25,6 +28,9 @@ func main() {
 		cancelAlloc()
 	case "run_test":
 		runTest(token, size, create)
+	case "logparser":
+		logparser.Log_parser("log_files/" + *log_file_name)
+
 	}
 }
 
@@ -174,6 +180,8 @@ func runTest(token *string, size *string, create *string) {
 
 	// Run the second command to migrate using the extracted allocation ID and provided access token
 	migrateCmd := exec.Command("./s3migration", "migrate", "--allocation", allocationID, "--source", "google_drive", "--access-token", accessToken)
+
+	fmt.Printf("Running command for migration: %s\n", migrateCmd.String())
 
 	// Capture the combined output of the migration command
 	rawOutput, err = migrateCmd.CombinedOutput()
