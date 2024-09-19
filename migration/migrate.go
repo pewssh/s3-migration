@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -488,7 +489,7 @@ func processOperation(ctx context.Context, downloadObj *DownloadObjectMeta) (Mig
 		zlogger.Logger.Error(err)
 		return op, err
 	}
-	mimeType, err := zboxutil.GetFileContentType(downloadObj.Ext, fileObj)
+	mimeType, err := zboxutil.GetFileContentType(path.Ext(fileInfo.Name()), fileObj)
 	if err != nil {
 		zlogger.Logger.Error("content type error: ", err, " file: ", fileInfo.Name(), " objKey:", downloadObj.ObjectKey)
 		return op, err
