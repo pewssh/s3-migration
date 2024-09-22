@@ -2,6 +2,7 @@ module github.com/0chain/s3migration
 
 go 1.21
 
+
 toolchain go1.22.2
 
 require (
@@ -14,6 +15,36 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/viper v1.15.0
+	golang.org/x/oauth2 v0.18.0
+)
+
+require (
+	cloud.google.com/go/compute v1.23.4 // indirect
+	cloud.google.com/go/compute/metadata v0.2.3 // indirect
+	github.com/andybalholm/brotli v1.0.5 // indirect
+	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/go-logr/logr v1.4.1 // indirect
+	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
+	github.com/golang/protobuf v1.5.3 // indirect
+	github.com/google/s2a-go v0.1.7 // indirect
+	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
+	github.com/googleapis/gax-go/v2 v2.12.3 // indirect
+	github.com/hashicorp/golang-lru/v2 v2.0.1 // indirect
+	github.com/hitenjain14/fasthttp v0.0.0-20240229173600-722723e15e17 // indirect
+	github.com/klauspost/compress v1.17.0 // indirect
+	github.com/valyala/bytebufferpool v1.0.0 // indirect
+	github.com/valyala/fasthttp v1.51.0 // indirect
+	go.opencensus.io v0.24.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0 // indirect
+	go.opentelemetry.io/otel v1.24.0 // indirect
+	go.opentelemetry.io/otel/metric v1.24.0 // indirect
+	go.opentelemetry.io/otel/trace v1.24.0 // indirect
+	golang.org/x/net v0.22.0 // indirect
+	google.golang.org/appengine v1.6.8 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240318140521-94a12d6c2237 // indirect
+	google.golang.org/grpc v1.62.1 // indirect
+	google.golang.org/protobuf v1.33.0 // indirect
 )
 
 require (
@@ -41,11 +72,12 @@ require (
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2 // indirect
 	github.com/deckarep/golang-set v1.8.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.1.0 // indirect
+	github.com/dropbox/dropbox-sdk-go-unofficial/v6 v6.0.5
 	github.com/ethereum/go-ethereum v1.10.26 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
-	github.com/google/uuid v1.3.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/h2non/filetype v1.1.4-0.20231228185113-6469358c2bcb // indirect
 	github.com/hack-pad/go-webworkers v0.1.0 // indirect
