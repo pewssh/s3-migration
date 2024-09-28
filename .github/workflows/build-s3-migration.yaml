@@ -217,7 +217,7 @@ jobs:
           repository: ${{ github.repository }}
           status_name: "0Chain System Tests"
           target_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          github_token: ${{ github.token }}
+          # github_token: ${{ github.token }}
 
       - name: "Deploy 0Chain"
         uses: 0chain/actions/deploy-0chain@master
@@ -262,4 +262,4 @@ jobs:
           repository: ${{ github.repository }}
           status_name: "0Chain System Tests"
           target_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          github_token: ${{ github.token }}
+          # github_token: ${{ github.token }}
