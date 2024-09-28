@@ -6,9 +6,9 @@ concurrency:
 
 on:
   push:
-    branches: [ master, staging, sprint* ]
+    branches: [master, staging, sprint*]
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
   pull_request:
   workflow_dispatch:
 
@@ -20,7 +20,7 @@ jobs:
       - name: Setup go 1.20
         uses: actions/setup-go@v3
         with:
-          go-version: '1.22' # The Go version to download (if necessary) and use.
+          go-version: "1.22" # The Go version to download (if necessary) and use.
 
       - name: Checkout
         uses: actions/checkout@v2
@@ -28,9 +28,9 @@ jobs:
       - name: Get Branch
         id: get_branch
         run: |
-            BRANCH=$(echo ${GITHUB_REF#refs/heads/} | sed 's/\//-/g')
-            echo ::set-output name=BRANCH::${BRANCH}
-            echo $BRANCH
+          BRANCH=$(echo ${GITHUB_REF#refs/heads/} | sed 's/\//-/g')
+          echo ::set-output name=BRANCH::${BRANCH}
+          echo $BRANCH
 
       - name: Set GITHUB_ENV
         run: |
@@ -82,11 +82,11 @@ jobs:
           aws-region: us-east-2
 
       - name: Push to AWS S3
-        if:  github.ref == 'refs/heads/staging'
+        if: github.ref == 'refs/heads/staging'
         run: |
           aws s3 cp s3mgrt s3://${{ secrets.S3_MGRT_BINARY_BUCKET }}/s3mgrt
 
-      - name: 'Upload Artifact'
+      - name: "Upload Artifact"
         uses: actions/upload-artifact@v4
         with:
           name: s3mgrt-linux
@@ -188,7 +188,7 @@ jobs:
   system-tests:
     if: github.event_name != 'workflow_dispatch'
     needs: build-linux
-    runs-on: [ tests-suite ]
+    runs-on: [tests-suite]
     timeout-minutes: 120
     steps:
       - name: "Get current PR"
@@ -202,6 +202,10 @@ jobs:
           echo "NETWORK_URL=$(echo dev-${RUNNER_NAME:(-1)}.devnet-0chain.net)" >> $GITHUB_ENV
           echo "RUNNER_NUMBER=${RUNNER_NAME:(-1)}" >> $GITHUB_ENV
           echo "CURRENT_BRANCH=$(echo $(([ -z '${{ github.head_ref }}' ] && echo  ${GITHUB_REF#refs/*/}) || echo '${{ github.head_ref }}'))" >> $GITHUB_ENV
+
+      - name: Debug Token
+        run: |
+          echo "Token is available: ${{ github.token != '' }}"
 
       - name: "Set PR status as pending"
         uses: 0chain/actions/set-pr-status@master
@@ -247,7 +251,6 @@ jobs:
           run_api_system_tests: false
           run_cli_system_tests: false
           run_s3mgrt_system_tests: true
-
 
       - name: "Set PR status as ${{ job.status }}"
         if: ${{ (success() || failure()) && steps.findPr.outputs.number }}
